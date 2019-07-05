@@ -1,9 +1,14 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-  <Import Project="..\..\build\common.props" />
+
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
     <TargetFramework>netcoreapp2.1</TargetFramework>
-    <RootNamespace>Microsoft.Azure.WebJobs.EventHubs.UnitTests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>Microsoft.Azure.WebJobs.EventHubs.Tests</AssemblyName>
+    <RootNamespace>Microsoft.Azure.WebJobs.EventHubs.Tests</RootNamespace>
+    <CodeAnalysisRuleSet>..\..\src.ruleset</CodeAnalysisRuleSet>
+    <SignAssembly>true</SignAssembly>
+    <DelaySign>true</DelaySign>
+    <AssemblyOriginatorKeyFile>..\..\sign.snk</AssemblyOriginatorKeyFile>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
     <StyleCopTreatErrorsAsWarnings>false</StyleCopTreatErrorsAsWarnings>
@@ -29,10 +34,10 @@
     <PackageReference Include="xunit" Version="2.3.1" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.3.1" />
     <DotNetCliToolReference Include="dotnet-xunit" Version="2.3.0-beta3-build3705" />
-  </ItemGroup>
-
+    <PackageReference Include="Microsoft.Azure.WebJobs.Host.TestCommon" Version="3.0.10-11593" />
+  </ItemGroup>  
+  
   <ItemGroup>
     <ProjectReference Include="..\..\src\Microsoft.Azure.WebJobs.Extensions.EventHubs\WebJobs.Extensions.EventHubs.csproj" />
-    <ProjectReference Include="..\Microsoft.Azure.WebJobs.Host.TestCommon\WebJobs.Host.TestCommon.csproj" />
   </ItemGroup>
 </Project>

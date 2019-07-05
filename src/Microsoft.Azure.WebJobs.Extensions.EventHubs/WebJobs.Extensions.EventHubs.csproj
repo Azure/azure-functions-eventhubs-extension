@@ -1,13 +1,27 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-  <Import Project="..\..\build\common.props" />
 
   <PropertyGroup>
-    <Version>$(ExtensionsEventHubsVersion)</Version>
     <TargetFramework>netstandard2.0</TargetFramework>
     <AssemblyName>Microsoft.Azure.WebJobs.EventHubs</AssemblyName>
     <RootNamespace>Microsoft.Azure.WebJobs.EventHubs</RootNamespace>
     <PackageId>Microsoft.Azure.WebJobs.Extensions.EventHubs</PackageId>
     <Description>Microsoft Azure WebJobs SDK EventHubs Extension</Description>
+    <Version>3.0.6$(VersionSuffix)</Version>
+    <CommitHash Condition="$(CommitHash) == ''">N/A</CommitHash>
+    <InformationalVersion>$(Version) Commit hash: $(CommitHash)</InformationalVersion>
+    <Authors>Microsoft</Authors>
+    <Company>Microsoft</Company>
+    <Copyright>© Microsoft Corporation. All rights reserved.</Copyright>
+    <PackageLicenseUrl>https://go.microsoft.com/fwlink/?linkid=2028464</PackageLicenseUrl>
+    <PackageIconUrl>https://raw.githubusercontent.com/Azure/azure-webjobs-sdk/dev/webjobs.png</PackageIconUrl>
+    <PackageProjectUrl>http://go.microsoft.com/fwlink/?LinkID=320972</PackageProjectUrl>
+    <RepositoryType>git</RepositoryType>
+    <RepositoryUrl>https://github.com/Azure/azure-functions-servicebus-extension</RepositoryUrl>
+    <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
+    <SignAssembly>true</SignAssembly>
+    <AssemblyOriginatorKeyFile>..\..\sign.snk</AssemblyOriginatorKeyFile>
+    <CodeAnalysisRuleSet>..\..\src.ruleset</CodeAnalysisRuleSet>
+    <DelaySign>true</DelaySign>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
@@ -24,13 +38,13 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Azure.EventHubs.Processor" Version="2.1.0" />
+    <PackageReference Include="Microsoft.Azure.WebJobs" Version="3.0.10" />
     <PackageReference Include="StyleCop.Analyzers" Version="1.1.0-beta004">
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Microsoft.Azure.WebJobs.Host\WebJobs.Host.csproj" />
-    <ProjectReference Include="..\Microsoft.Azure.WebJobs\WebJobs.csproj" />
+    <AdditionalFiles Include="..\..\stylecop.json" Link="stylecop.json" />
   </ItemGroup>
 </Project>
