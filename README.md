@@ -1,7 +1,14 @@
-﻿# .NET Extensions for Azure Functions
+﻿﻿# Event Hubs Extension for Azure Functions
+This extension provides functionality for receiving Event Hubs messges in Azure Functions, allowing you to easily write functions that respond to any message published to Event Hubs.
 
 |Branch|Status|
 |---|---|
-|master|[![Build Status](https://azfunc.visualstudio.com/Azure%20Functions/_apis/build/status/azure-functions-dotnet-extensions-ci?branchName=master)](https://azfunc.visualstudio.com/Azure%20Functions/_build/latest?definitionId=17&branchName=master)
+|master|[![Build Status](https://azfunc.visualstudio.com/Azure%20Functions/_apis/build/status/azure-functions-dotnet-extensions-ci?branchName=master)](https://azfunc.visualstudio.com/Azure%20Functions/_build/latest?definitionId=18&branchName=master)
 
-The Service Bus Extension for Azure Functions is an open-source, cross-platform set of APIs for commonly used programming patterns and utilities, in Azure Functions.
+## License
+
+This project is under the benevolent umbrella of the [.NET Foundation](http://www.dotnetfoundation.org/) and is licensed under [the MIT License](https://github.com/Azure/azure-webjobs-sdk/blob/master/LICENSE.txt)
+
+## Contributing
+
+This project has adopted the [Microsoft Open Source Code of Conduct](https://opensource.microsoft.com/codeofconduct/). For more information see the [Code of Conduct FAQ](https://opensource.microsoft.com/codeofconduct/faq/) or contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with any additional questions or comments.
