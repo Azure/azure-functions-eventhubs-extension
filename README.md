@@ -1,4 +1,4 @@
-﻿﻿# Event Hubs Extension for Azure Functions
+﻿# Event Hubs Extension for Azure Functions
 This extension provides functionality for receiving Event Hubs messges in Azure Functions, allowing you to easily write functions that respond to any message published to Event Hubs.
 
 |Branch|Status|
