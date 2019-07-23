@@ -78,6 +78,13 @@ namespace Microsoft.Azure.WebJobs.EventHubs
                 return _options.Value.GetEventHubClient(attribute.EventHubName, attribute.Connection);
             });
 
+            context.AddBindingRule<EventHubAttribute>()
+                .BindToInput(attribute =>
+            {
+                EventHubClient client = _options.Value.GetEventHubClient(attribute.EventHubName, attribute.Connection);
+                return new PartitionedSender(client, _converterManager, attribute);
+            });
+
             ExceptionHandler = (e =>
             {
                 LogExceptionReceivedEvent(e, _loggerFactory);
