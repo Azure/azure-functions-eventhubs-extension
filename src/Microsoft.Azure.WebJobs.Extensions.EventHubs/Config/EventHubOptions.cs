@@ -200,6 +200,13 @@ namespace Microsoft.Azure.WebJobs.EventHubs
         internal EventHubClient GetEventHubClient(string eventHubName, string connection)
         {
             EventHubClient client;
+
+            if (string.IsNullOrEmpty(eventHubName))
+            {
+                EventHubsConnectionStringBuilder builder = new EventHubsConnectionStringBuilder(connection);
+                eventHubName = builder.EntityPath;
+            }
+
             if (_clients.TryGetValue(eventHubName, out client))
             {
                 return client;
