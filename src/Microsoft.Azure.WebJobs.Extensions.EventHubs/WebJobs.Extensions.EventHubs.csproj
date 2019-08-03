@@ -6,7 +6,7 @@
     <RootNamespace>Microsoft.Azure.WebJobs.EventHubs</RootNamespace>
     <PackageId>Microsoft.Azure.WebJobs.Extensions.EventHubs</PackageId>
     <Description>Microsoft Azure WebJobs SDK EventHubs Extension</Description>
-    <Version>3.0.6$(VersionSuffix)</Version>
+    <Version>4.0.0-beta2</Version>
     <CommitHash Condition="$(CommitHash) == ''">N/A</CommitHash>
     <InformationalVersion>$(Version) Commit hash: $(CommitHash)</InformationalVersion>
     <Authors>Microsoft</Authors>
@@ -37,7 +37,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Azure.EventHubs.Processor" Version="2.1.0" />
+    <PackageReference Include="Microsoft.Azure.EventHubs.Processor" Version="3.0.0" />
     <PackageReference Include="Microsoft.Azure.WebJobs" Version="3.0.10" />
     <PackageReference Include="StyleCop.Analyzers" Version="1.1.0-beta004">
       <PrivateAssets>all</PrivateAssets>
