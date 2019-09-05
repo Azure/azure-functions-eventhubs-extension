@@ -23,13 +23,9 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
             Assert.Throws<ArgumentNullException>(() => new EventHubAsyncCollector(null));
         }
 
-        public EventData CreateEvent(byte[] body, string partitionKey)
+        public PartitionedValue CreateEvent(byte[] body, string partitionKey)
         {
-            var data = new EventData(body);
-            IDictionary<string, object> sysProps = TestHelpers.New<SystemPropertiesCollection>();
-            sysProps["x-opt-partition-key"] = partitionKey;
-            TestHelpers.SetField(data, "SystemProperties", sysProps);
-            return data;
+            return new PartitionedValue(body, partitionKey);
         }
 
         [Fact]
@@ -37,7 +33,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
         {
             var collector = new TestEventHubAsyncCollector();
 
-            await collector.AddAsync(this.CreateEvent(new byte[] { 1 }, "pk1"));
+            await collector.AddAsync(CreateEvent(new byte[] { 1 }, "pk1"));
             await collector.AddAsync(CreateEvent(new byte[] { 2 }, "pk2"));
 
             // Not physically sent yet since we haven't flushed
@@ -62,7 +58,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
             await collector.FlushAsync(); // should be nop.
 
             var payload = new byte[] { 1, 2, 3 };
-            var e1 = new EventData(payload);
+            var e1 = new PartitionedValue(payload);
             await collector.AddAsync(e1);
 
             // Not physically sent yet since we haven't flushed
@@ -82,7 +78,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
             // Sending a bunch of little events
             for (int i = 0; i < 150; i++)
             {
-                var e1 = new EventData(new byte[] { 1, 2, 3 });
+                var e1 = new PartitionedValue(new byte[] { 1, 2, 3 });
                 await collector.AddAsync(e1);
             }
 
@@ -98,7 +94,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
             // Trip the 256k EventHub limit.
             for (int i = 0; i < 10; i++)
             {
-                var e1 = new EventData(new byte[10 * 1024]);
+                var e1 = new PartitionedValue(new byte[10 * 1024]);
                 await collector.AddAsync(e1);
             }
 
@@ -108,7 +104,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
             // This will push it over the theshold
             for (int i = 0; i < 20; i++)
             {
-                var e1 = new EventData(new byte[10 * 1024]);
+                var e1 = new PartitionedValue(new byte[10 * 1024]);
                 await collector.AddAsync(e1);
             }
 
@@ -122,7 +118,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
 
             // event hub max is 256k payload.
             var hugePayload = new byte[300 * 1024];
-            var e1 = new EventData(hugePayload);
+            var e1 = new PartitionedValue(hugePayload);
 
             try
             {
@@ -177,7 +173,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
                             {
                                 expected.Add(payloadStr);
                             }
-                            collector.AddAsync(new EventData(payload)).Wait();
+                            collector.AddAsync(new PartitionedValue(payload)).Wait();
                         }
                     });
             }
@@ -197,7 +193,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
             byte[] ignoreBytes = Encoding.UTF8.GetBytes(ignore);
             for (int i = 0; i < 100; i++)
             {
-                await collector.AddAsync(new EventData(ignoreBytes));
+                await collector.AddAsync(new PartitionedValue(ignoreBytes));
             }
 
             // Verify that every event we sent is accounted for; and that there are no duplicates.
@@ -242,7 +238,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
 
             public List<byte[]> SentEvents { get => sentEvents; set => sentEvents = value; }
 
-            protected override Task SendBatchAsync(IEnumerable<EventData> batch)
+            protected override Task SendBatchAsync(IEnumerable<EventData> batch, string patitionKey)
             {
                 // Assert they all have the same partition key (could be null)
                 var partitionKey = batch.First().SystemProperties?.PartitionKey;

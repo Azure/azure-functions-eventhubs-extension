@@ -61,14 +61,67 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             }
         }
 
-        [Fact]
-        public async Task EventHub_PartitionKey()
+        [Theory]
+        [InlineData(typeof(string))]
+        [InlineData(typeof(byte[]))]
+        [InlineData(typeof(EventData))]
+        [InlineData(typeof(DummyClass))]
+        public async Task EventHub_PartitionKeySender_Single(Type type)
         {
             using (JobHost host = BuildHost<EventHubParitionKeyTestJobs>())
             {
-                var method = typeof(EventHubParitionKeyTestJobs).GetMethod("SendEvents_TestHub", BindingFlags.Static | BindingFlags.Public);
+                var method = typeof(EventHubParitionKeyTestJobs).GetMethod("SendEvents_PartitionSenderSingle", BindingFlags.Static | BindingFlags.Public);
                 _eventWait = new ManualResetEvent(initialState: false);
-                await host.CallAsync(method, new { input = _testId });
+                switch (type)
+                {
+                    case Type stringType when stringType == typeof(string):
+                        await host.CallAsync(method, new { input = _testId });
+                        break;
+                    case Type byteArrayType when byteArrayType == typeof(byte[]):
+                        await host.CallAsync(method, new { input = Encoding.UTF8.GetBytes(_testId) });
+                        break;
+                    case Type eventDataType when eventDataType == typeof(EventData):
+                        await host.CallAsync(method, new { input = new EventData(Encoding.UTF8.GetBytes(_testId)) });
+                        break;
+                    case Type classType when classType == typeof(DummyClass):
+                        await host.CallAsync(method, new { input = new DummyClass { Value = _testId } });
+                        break;
+                }
+
+
+                bool result = _eventWait.WaitOne(Timeout);
+
+                Assert.True(result);
+            }
+        }
+
+        [Theory]
+        [InlineData(typeof(string))]
+        [InlineData(typeof(byte[]))]
+        [InlineData(typeof(EventData))]
+        [InlineData(typeof(DummyClass))]
+        public async Task EventHub_PartitionKeySender_Multiple(Type type)
+        {
+            using (JobHost host = BuildHost<EventHubParitionKeyTestJobs>())
+            {
+                var method = typeof(EventHubParitionKeyTestJobs).GetMethod("SendEvents_PartitionSenderMultiple", BindingFlags.Static | BindingFlags.Public);
+                _eventWait = new ManualResetEvent(initialState: false);
+                switch (type)
+                {
+                    case Type stringType when stringType == typeof(string):
+                        await host.CallAsync(method, new { input = _testId });
+                        break;
+                    case Type byteArrayType when byteArrayType == typeof(byte[]):
+                        await host.CallAsync(method, new { input = Encoding.UTF8.GetBytes(_testId) });
+                        break;
+                    case Type eventDataType when eventDataType == typeof(EventData):
+                        await host.CallAsync(method, new { input = new EventData(Encoding.UTF8.GetBytes(_testId)) });
+                        break;
+                    case Type classType when classType == typeof(DummyClass):
+                        await host.CallAsync(method, new { input = new DummyClass { Value = _testId } });
+                        break;
+                }
+
 
                 bool result = _eventWait.WaitOne(Timeout);
 
@@ -144,21 +197,59 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 
         public class EventHubParitionKeyTestJobs
         {
-            public static async Task SendEvents_TestHub(
-                string input,
-                [EventHub(TestHubName)] EventHubClient client)
+            public static async Task SendEvents_PartitionSenderMultiple(
+                object input,
+                [EventHub(TestHubName)] IAsyncCollector<PartitionedValue> events)
             {
-                List<EventData> list = new List<EventData>();
-                EventData evt = new EventData(Encoding.UTF8.GetBytes(input));
-
                 // Send event without PK
-                await client.SendAsync(evt);
+                await AddWithPartitionKeyAsync(input, "", events);
 
                 // Send event with different PKs
                 for (int i = 0; i < 5; i++)
                 {
-                    evt = new EventData(Encoding.UTF8.GetBytes(input));
-                    await client.SendAsync(evt, "test_pk" + i);
+                    await AddWithPartitionKeyAsync(input, "test_pk" + i, events);
+                }
+            }
+
+            public static void SendEvents_PartitionSenderSingle(
+                object input,
+                [EventHub(TestHubName)] out PartitionedValue data)
+            {
+                string parttionKey = "test_pk_single";
+                data = null;
+                switch (input.GetType())
+                {
+                    case Type stringType when stringType == typeof(string):
+                        data = new PartitionedValue(input as string, parttionKey);
+                        break;
+                    case Type byteArrayType when byteArrayType == typeof(byte[]):
+                        data = new PartitionedValue(input as byte[], parttionKey);
+                        break;
+                    case Type eventDataType when eventDataType == typeof(EventData):
+                        data = new PartitionedValue(input as EventData, parttionKey);
+                        break;
+                    case Type classType when classType == typeof(DummyClass):
+                        data = new PartitionedValue(input as DummyClass, parttionKey);
+                        break;
+                }
+            }
+
+            private static async Task AddWithPartitionKeyAsync(object input, string parttionKey, IAsyncCollector<PartitionedValue> events)
+            {
+                switch (input.GetType())
+                {
+                    case Type stringType when stringType == typeof(string):
+                        await events.AddAsync(new PartitionedValue(input as string, parttionKey));
+                        break;
+                    case Type byteArrayType when byteArrayType == typeof(byte[]):
+                        await events.AddAsync(new PartitionedValue(input as byte[], parttionKey));
+                        break;
+                    case Type eventDataType when eventDataType == typeof(EventData):
+                        await events.AddAsync(new PartitionedValue(input as EventData, parttionKey));
+                        break;
+                    case Type classType when classType == typeof(DummyClass):
+                        await events.AddAsync(new PartitionedValue(input as DummyClass, parttionKey));
+                        break;
                 }
             }
 
@@ -169,12 +260,12 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                     string message = Encoding.UTF8.GetString(eventData.Body);
 
                     // filter for the ID the current test is using
-                    if (message == _testId)
+                    if (message.Contains(_testId))
                     {
                         _results.Add(eventData.SystemProperties.PartitionKey);
                         _results.Sort();
 
-                        if (_results.Count == 6 && _results[5] == "test_pk4")
+                        if ((_results.Count == 6 && _results[5] == "test_pk4") || _results[0] == "test_pk_single")
                         {
                             _eventWait.Set();
                         }
@@ -210,6 +301,11 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             jobHost.StartAsync().GetAwaiter().GetResult();
 
             return jobHost;
+        }
+
+        private class DummyClass
+        {
+            public string Value { get; set; }
         }
     }
 }

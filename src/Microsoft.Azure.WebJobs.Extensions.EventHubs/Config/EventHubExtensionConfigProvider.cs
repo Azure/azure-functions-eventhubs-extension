@@ -61,7 +61,14 @@ namespace Microsoft.Azure.WebJobs.EventHubs
                 .AddConverter<EventData, string>(ConvertEventData2String)
                 .AddConverter<byte[], EventData>(ConvertBytes2EventData)
                 .AddConverter<EventData, byte[]>(ConvertEventData2Bytes)
-                .AddOpenConverter<OpenType.Poco, EventData>(ConvertPocoToEventData);
+                .AddConverter<byte[], PartitionedValue>(ConvertBytes2PartitionedValue)
+                .AddConverter<string, PartitionedValue>(ConvertString2PartitionedValue)
+                .AddConverter<EventData, PartitionedValue>(ConvertEventData2PartitionedValue)
+                .AddConverter<PartitionedValue, string>(ConvertPartitionedValue2String)
+                .AddConverter<PartitionedValue, byte[]>(ConvertPartitionedValue2Bytes)
+                .AddConverter<PartitionedValue, EventData>(ConvertPartitionedValue2EventData)
+                .AddOpenConverter<OpenType.Poco, EventData>(ConvertPocoToEventData)
+                .AddOpenConverter<OpenType.Poco, PartitionedValue>(ConvertPocoToPartitionedValue);
 
             // register our trigger binding provider
             var triggerBindingProvider = new EventHubTriggerAttributeBindingProvider(_config, _nameResolver, _converterManager, _options, _loggerFactory);
@@ -126,7 +133,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs
             }
         }
 
-        private IAsyncCollector<EventData> BuildFromAttribute(EventHubAttribute attribute)
+        private IAsyncCollector<PartitionedValue> BuildFromAttribute(EventHubAttribute attribute)
         {
             EventHubClient client = _options.Value.GetEventHubClient(attribute.EventHubName, attribute.Connection);
             return new EventHubAsyncCollector(client);
@@ -147,6 +154,29 @@ namespace Microsoft.Azure.WebJobs.EventHubs
         private static Task<object> ConvertPocoToEventData(object arg, Attribute attrResolved, ValueBindingContext context)
         {
             return Task.FromResult<object>(ConvertString2EventData(JsonConvert.SerializeObject(arg)));
+        }
+
+        private static PartitionedValue ConvertBytes2PartitionedValue(byte[] input)
+            => new PartitionedValue(input);
+
+        private static PartitionedValue ConvertString2PartitionedValue(string input)
+            => ConvertBytes2PartitionedValue(Encoding.UTF8.GetBytes(input));
+
+        private static PartitionedValue ConvertEventData2PartitionedValue(EventData input)
+            => new PartitionedValue(input);
+
+        private static string ConvertPartitionedValue2String(PartitionedValue x)
+            => Encoding.UTF8.GetString(ConvertPartitionedValue2Bytes(x));
+
+        private static byte[] ConvertPartitionedValue2Bytes(PartitionedValue input)
+            => input.EventData.Body.Array;
+
+        private static EventData ConvertPartitionedValue2EventData(PartitionedValue input)
+            => input.EventData;
+
+        private static Task<object> ConvertPocoToPartitionedValue(object arg, Attribute attrResolved, ValueBindingContext context)
+        {
+            return Task.FromResult<object>(ConvertString2PartitionedValue(JsonConvert.SerializeObject(arg)));
         }
     }
 }
