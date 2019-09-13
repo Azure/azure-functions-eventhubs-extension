@@ -8,10 +8,13 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Azure.EventHubs;
+using Microsoft.Azure.WebJobs.Description;
 using Microsoft.Azure.WebJobs.EventHubs;
+using Microsoft.Azure.WebJobs.Host.Config;
 using Microsoft.Azure.WebJobs.Host.TestCommon;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
+using Newtonsoft.Json.Linq;
 using Xunit;
 
 namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
@@ -67,6 +70,21 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             using (JobHost host = BuildHost<EventHubParitionKeyTestJobs>())
             {
                 var method = typeof(EventHubParitionKeyTestJobs).GetMethod("SendEvents_TestHub", BindingFlags.Static | BindingFlags.Public);
+                _eventWait = new ManualResetEvent(initialState: false);
+                await host.CallAsync(method, new { input = _testId });
+
+                bool result = _eventWait.WaitOne(Timeout);
+
+                Assert.True(result);
+            }
+        }
+
+        [Fact]
+        public async Task EventHub_AsyncCollector_EventDataExConversion()
+        {
+            using (JobHost host = BuildHost<EventHubParitionKeyTestJobs>())
+            {
+                var method = typeof(EventHubParitionKeyTestJobs).GetMethod("SendEvents_EventDataExConversion_TestHub", BindingFlags.Static | BindingFlags.Public);
                 _eventWait = new ManualResetEvent(initialState: false);
                 await host.CallAsync(method, new { input = _testId });
 
@@ -162,6 +180,27 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 }
             }
 
+            public static async Task SendEvents_EventDataExConversion_TestHub(
+                string input,
+                [EventHub(TestHubName)] IAsyncCollector<byte[]> collector)
+            {
+                // Send event without PK
+                await collector.AddAsync(Encoding.UTF8.GetBytes(input));
+
+                // Send event with different PKs
+                for (int i = 0; i < 5; i++)
+                {
+                    // send json conforming to the EventDataEx format
+                    // which will be converted by the extension
+                    var jo = new JObject
+                    {
+                        { "PartitionKey", "test_pk" + i },
+                        { "Body", Encoding.UTF8.GetBytes(input) }
+                    };
+                    await collector.AddAsync(Encoding.UTF8.GetBytes(jo.ToString()));
+                }
+            }
+
             public static void ProcessMultiplePartitionEvents([EventHubTrigger(TestHubName)] EventData[] events)
             {
                 foreach (EventData eventData in events)
@@ -203,6 +242,11 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                         options.AddSender(TestHubName, connection);
                         options.AddReceiver(TestHubName, connection);
                     });
+
+                    // if this extension is registered AFTER the base extension
+                    // it's converters will replace the built in converters
+                    // (ConverterManager logic is replace/last one wins)
+                    b.AddExtension<EventHubEventDataExExtensionConfigProvider>();
                 })
                 .Build();
 
@@ -210,6 +254,55 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             jobHost.StartAsync().GetAwaiter().GetResult();
 
             return jobHost;
+        }
+    }
+
+    internal class EventHubEventDataExExtensionConfigProvider : IExtensionConfigProvider
+    {
+        public void Initialize(ExtensionConfigContext context)
+        {
+            context.AddConverter<byte[], EventData>(ConvertBytesToEventData);
+        }
+
+        private static EventData ConvertBytesToEventData(byte[] bytes)
+        {
+            string input = Encoding.UTF8.GetString(bytes);
+
+            if (IsJsonObject(input))
+            {
+                try
+                {
+                    // attempt to parse as an EventDataEx
+                    var jo = JObject.Parse(input);
+                    var partitionKey = (string)jo["PartitionKey"];
+                    if (!string.IsNullOrEmpty(partitionKey))
+                    {
+                        var body = (byte[])jo["Body"];
+                        return new EventDataEx(body)
+                        {
+                            PartitionKey = partitionKey
+                        };
+                    }
+                }
+                catch
+                {
+                    // best effort
+                }
+            }
+
+            // return default EventData
+            return new EventData(bytes);
+        }
+
+        private static bool IsJsonObject(string input)
+        {
+            if (string.IsNullOrEmpty(input))
+            {
+                return false;
+            }
+
+            input = input.Trim();
+            return (input.StartsWith("{", StringComparison.OrdinalIgnoreCase) && input.EndsWith("}", StringComparison.OrdinalIgnoreCase));
         }
     }
 }

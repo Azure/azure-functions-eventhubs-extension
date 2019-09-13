@@ -242,10 +242,9 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
 
             public List<byte[]> SentEvents { get => sentEvents; set => sentEvents = value; }
 
-            protected override Task SendBatchAsync(IEnumerable<EventData> batch)
+            protected override Task SendBatchAsync(string partitionKey, IEnumerable<EventData> batch)
             {
                 // Assert they all have the same partition key (could be null)
-                var partitionKey = batch.First().SystemProperties?.PartitionKey;
                 foreach (var e in batch)
                 {
                     Assert.Equal(partitionKey, e.SystemProperties?.PartitionKey);
