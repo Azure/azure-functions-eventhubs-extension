@@ -52,17 +52,24 @@ namespace Microsoft.Azure.WebJobs.EventHubs
                 throw new ArgumentNullException("item");
             }
 
-            string key = item.SystemProperties?.PartitionKey ?? string.Empty;
+            string partitionKey = string.Empty;
+            var itemEx = item as EventDataEx;
+            if (itemEx != null)
+            {
+                // apply any extended properties
+                partitionKey = itemEx.PartitionKey ?? string.Empty;
+            }
 
             PartitionCollector partition;
             lock (_partitions)
             {
-                if (!_partitions.TryGetValue(key, out partition))
+                if (!_partitions.TryGetValue(partitionKey, out partition))
                 {
-                    partition = new PartitionCollector(this);
-                    _partitions[key] = partition;
+                    partition = new PartitionCollector(partitionKey, this);
+                    _partitions[partitionKey] = partition;
                 }
             }
+
             await partition.AddAsync(item, cancellationToken);
         }
 
@@ -91,26 +98,29 @@ namespace Microsoft.Azure.WebJobs.EventHubs
         }
 
         /// <summary>
-        /// Send the batch of events. All items in the batch will have the same partition key. 
+        /// Send the batch of events. 
         /// </summary>
+        /// <param name="partitionKey">The partition key to use</param>
         /// <param name="batch">the set of events to send</param>
-        protected virtual async Task SendBatchAsync(IEnumerable<EventData> batch)
+        protected virtual async Task SendBatchAsync(string partitionKey, IEnumerable<EventData> batch)
         {
-            await _client.SendAsync(batch);
+            await _client.SendAsync(batch, partitionKey);
         }
 
         // A per-partition sender 
         private class PartitionCollector : IAsyncCollector<EventData>
         {
             private readonly EventHubAsyncCollector _parent;
+            private readonly string _partitionKey;
 
             private List<EventData> _list = new List<EventData>();
 
             // total size of bytes in _list that we'll be sending in this batch. 
             private int _currentByteSize = 0;
 
-            public PartitionCollector(EventHubAsyncCollector parent)
+            public PartitionCollector(string partitionKey, EventHubAsyncCollector parent)
             {
+                _partitionKey = partitionKey;
                 this._parent = parent;
             }
 
@@ -171,7 +181,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs
 
                 if (batch.Length > 0)
                 {
-                    await _parent.SendBatchAsync(batch);
+                    await _parent.SendBatchAsync(_partitionKey, batch);
 
                     // Dispose all messages to help with memory pressure. If this is missed, the finalizer thread will still get them. 
                     foreach (var msg in batch)

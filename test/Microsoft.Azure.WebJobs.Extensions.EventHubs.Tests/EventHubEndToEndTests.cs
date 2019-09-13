@@ -9,9 +9,11 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Azure.EventHubs;
 using Microsoft.Azure.WebJobs.EventHubs;
+using Microsoft.Azure.WebJobs.Host.Config;
 using Microsoft.Azure.WebJobs.Host.TestCommon;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
+using Newtonsoft.Json.Linq;
 using Xunit;
 
 namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
@@ -67,6 +69,21 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             using (JobHost host = BuildHost<EventHubParitionKeyTestJobs>())
             {
                 var method = typeof(EventHubParitionKeyTestJobs).GetMethod("SendEvents_TestHub", BindingFlags.Static | BindingFlags.Public);
+                _eventWait = new ManualResetEvent(initialState: false);
+                await host.CallAsync(method, new { input = _testId });
+
+                bool result = _eventWait.WaitOne(Timeout);
+
+                Assert.True(result);
+            }
+        }
+
+        [Fact]
+        public async Task EventHub_AsyncCollector_EventDataEx()
+        {
+            using (JobHost host = BuildHost<EventHubParitionKeyTestJobs>())
+            {
+                var method = typeof(EventHubParitionKeyTestJobs).GetMethod("SendEvents_EventDataEx_TestHub", BindingFlags.Static | BindingFlags.Public);
                 _eventWait = new ManualResetEvent(initialState: false);
                 await host.CallAsync(method, new { input = _testId });
 
@@ -144,6 +161,9 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 
         public class EventHubParitionKeyTestJobs
         {
+            /// <summary>
+            /// Test sending partitioned output using EventHubClient directly
+            /// </summary>
             public static async Task SendEvents_TestHub(
                 string input,
                 [EventHub(TestHubName)] EventHubClient client)
@@ -159,6 +179,29 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 {
                     evt = new EventData(Encoding.UTF8.GetBytes(input));
                     await client.SendAsync(evt, "test_pk" + i);
+                }
+            }
+
+            /// <summary>
+            /// Test sending partitioned output using EventDataEx extended properties
+            /// </summary>
+            public static async Task SendEvents_EventDataEx_TestHub(
+                string input,
+                [EventHub(TestHubName)] IAsyncCollector<EventData> collector)
+            {
+                byte[] bytes = Encoding.UTF8.GetBytes(input);
+
+                // Send event without PK
+                await collector.AddAsync(new EventData(bytes));
+
+                // Send event with different PKs
+                for (int i = 0; i < 5; i++)
+                {
+                    var evt = new EventDataEx(bytes)
+                    {
+                        PartitionKey = "test_pk" + i
+                    };
+                    await collector.AddAsync(evt);
                 }
             }
 
