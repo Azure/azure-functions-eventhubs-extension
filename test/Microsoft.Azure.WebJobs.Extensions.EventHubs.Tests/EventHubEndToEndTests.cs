@@ -93,6 +93,21 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             }
         }
 
+        [Fact]
+        public async Task EventHub_AsyncCollector_Json()
+        {
+            using (JobHost host = BuildHost<EventHubParitionKeyTestJobs>())
+            {
+                var method = typeof(EventHubParitionKeyTestJobs).GetMethod("SendEvents_Json_TestHub", BindingFlags.Static | BindingFlags.Public);
+                _eventWait = new ManualResetEvent(initialState: false);
+                await host.CallAsync(method, new { input = _testId });
+
+                bool result = _eventWait.WaitOne(Timeout);
+
+                Assert.True(result);
+            }
+        }
+
         public class EventHubTestSingleDispatchJobs
         {
             public static void SendEvent_TestHub(string input, [EventHub(TestHubName)] out EventData evt)
@@ -202,6 +217,28 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                         PartitionKey = "test_pk" + i
                     };
                     await collector.AddAsync(evt);
+                }
+            }
+
+            /// <summary>
+            /// Test sending partitioned output using Json extended properties
+            /// </summary>
+            public static async Task SendEvents_Json_TestHub(
+                string input,
+                [EventHub(TestHubName)] IAsyncCollector<string> collector)
+            {
+                byte[] bytes = Encoding.UTF8.GetBytes(input);
+
+                // Send event without PK
+                await collector.AddAsync(input);
+
+                // Send event with different PKs
+                for (int i = 0; i < 5; i++)
+                {
+                    var evt = new JObject();
+                    evt["PartitionKey"] = "test_pk" + i;
+                    evt["Body"] = bytes;
+                    await collector.AddAsync(evt.ToString());
                 }
             }
 
