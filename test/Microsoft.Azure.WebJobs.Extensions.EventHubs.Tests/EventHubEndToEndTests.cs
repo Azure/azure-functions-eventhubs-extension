@@ -8,7 +8,6 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Azure.EventHubs;
-using Microsoft.Azure.WebJobs.EventHubs;
 using Microsoft.Azure.WebJobs.Host.TestCommon;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
@@ -64,9 +63,9 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
         [Fact]
         public async Task EventHub_PartitionKey()
         {
-            using (JobHost host = BuildHost<EventHubParitionKeyTestJobs>())
+            using (JobHost host = BuildHost<EventHubPartitionKeyTestJobs>())
             {
-                var method = typeof(EventHubParitionKeyTestJobs).GetMethod("SendEvents_TestHub", BindingFlags.Static | BindingFlags.Public);
+                var method = typeof(EventHubPartitionKeyTestJobs).GetMethod("SendEvents_TestHub", BindingFlags.Static | BindingFlags.Public);
                 _eventWait = new ManualResetEvent(initialState: false);
                 await host.CallAsync(method, new { input = _testId });
 
@@ -84,7 +83,6 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 evt.Properties.Add("TestProp1", "value1");
                 evt.Properties.Add("TestProp2", "value2");
             }
-
 
             public static void ProcessSingleEvent([EventHubTrigger(TestHubName)] string evt,
                        string partitionKey, DateTime enqueuedTimeUtc, IDictionary<string, object> properties,
@@ -105,7 +103,6 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 
         public class EventHubTestMultipleDispatchJobs
         {
-
             public static void SendEvents_TestHub(int numEvents, string input, [EventHub(TestHubName)] out EventData[] events)
             {
                 events = new EventData[numEvents];
@@ -142,7 +139,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             }
         }
 
-        public class EventHubParitionKeyTestJobs
+        public class EventHubPartitionKeyTestJobs
         {
             public static async Task SendEvents_TestHub(
                 string input,
@@ -192,10 +189,11 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 .AddTestSettings()
                 .Build();
 
-            string connection = config.GetConnectionStringOrSetting("AzureWebJobsTestHubConnection");
-            Assert.True(!string.IsNullOrEmpty(connection), "Required test connection string is missing.");
+            const string connectionName = "AzureWebJobsTestHubConnection";
+            string connection = config.GetConnectionStringOrSetting(connectionName);
+            Assert.True(!string.IsNullOrEmpty(connection), $"Required test connection string '{connectionName}' is missing.");
 
-            var host = new HostBuilder()
+            IHost host = new HostBuilder()
                 .ConfigureDefaultTestHost<T>(b =>
                 {
                     b.AddEventHubs(options =>

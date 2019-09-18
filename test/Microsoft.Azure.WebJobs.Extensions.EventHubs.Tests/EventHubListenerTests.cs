@@ -39,6 +39,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
                 checkpoints++;
             }).Returns(Task.CompletedTask);
             var loggerMock = new Mock<ILogger>(MockBehavior.Strict);
+            loggerMock.Setup(l => l.BeginScope(It.IsAny<object>())).Returns(new NoopLoggerScope());
             var executor = new Mock<ITriggeredFunctionExecutor>(MockBehavior.Strict);
             executor.Setup(p => p.TryExecuteAsync(It.IsAny<TriggeredFunctionData>(), It.IsAny<CancellationToken>())).ReturnsAsync(new FunctionResult(true));
             var eventProcessor = new EventHubListener.EventProcessor(options, executor.Object, loggerMock.Object, true, checkpointer.Object);
@@ -68,6 +69,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
             var checkpointer = new Mock<EventHubListener.ICheckpointer>(MockBehavior.Strict);
             checkpointer.Setup(p => p.CheckpointAsync(partitionContext)).Returns(Task.CompletedTask);
             var loggerMock = new Mock<ILogger>(MockBehavior.Strict);
+            loggerMock.Setup(l => l.BeginScope(It.IsAny<object>())).Returns(new NoopLoggerScope());
             var executor = new Mock<ITriggeredFunctionExecutor>(MockBehavior.Strict);
             executor.Setup(p => p.TryExecuteAsync(It.IsAny<TriggeredFunctionData>(), It.IsAny<CancellationToken>())).ReturnsAsync(new FunctionResult(true));
             var eventProcessor = new EventHubListener.EventProcessor(options, executor.Object, loggerMock.Object, false, checkpointer.Object);
@@ -110,7 +112,10 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
                 var result = results[execution++];
                 return result;
             });
+
             var loggerMock = new Mock<ILogger>(MockBehavior.Strict);
+            loggerMock.Setup(l => l.BeginScope(It.IsAny<object>())).Returns(new NoopLoggerScope());
+
             var eventProcessor = new EventHubListener.EventProcessor(options, executor.Object, loggerMock.Object, true, checkpointer.Object);
 
             await eventProcessor.ProcessEventsAsync(partitionContext, events);
@@ -185,6 +190,13 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
             Assert.Equal("An Event Hub exception of type 'LeaseLostException' was thrown from Partition Id: '123', Owner: 'def', EventHubPath: 'abc'. This exception type is typically a result of Event Hub processor rebalancing and can be safely ignored.", msg.FormattedMessage);
             Assert.Null(msg.Exception);
             Assert.Equal(LogLevel.Information, msg.Level);
+        }
+
+        private class NoopLoggerScope : IDisposable
+        {
+            public void Dispose()
+            {
+            }
         }
     }
 }

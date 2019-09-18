@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -16,6 +17,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs
 {
     internal sealed class EventHubListener : IListener, IEventProcessorFactory
     {
+        private static readonly Dictionary<string, object> EmptyScope = new Dictionary<string, object>();
         private readonly ITriggeredFunctionExecutor _executor;
         private readonly EventProcessorHost _eventProcessorHost;
         private readonly bool _singleDispatch;
@@ -148,7 +150,8 @@ namespace Microsoft.Azure.WebJobs.EventHubs
                         {
                             TriggerValue = triggerInput.GetSingleEventTriggerInput(i)
                         };
-                        Task task = _executor.TryExecuteAsync(input, _cts.Token);
+
+                        Task task = TryExecuteWithLoggingAsync(input, triggerInput.Events[i]);
                         invocationTasks.Add(task);
                     }
 
@@ -166,8 +169,12 @@ namespace Microsoft.Azure.WebJobs.EventHubs
                         TriggerValue = triggerInput
                     };
 
-                    await _executor.TryExecuteAsync(input, _cts.Token);
+                    using (_logger.BeginScope(GetLinksScope(triggerInput.Events)))
+                    {
+                        await _executor.TryExecuteAsync(input, _cts.Token);
+                    }
                 }
+
                 // Dispose all messages to help with memory pressure. If this is missed, the finalizer thread will still get them.
                 bool hasEvents = false;
                 foreach (var message in messages)
@@ -176,7 +183,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs
                     message.Dispose();
                 }
 
-                // Checkpoint if we procesed any events.
+                // Checkpoint if we processed any events.
                 // Don't checkpoint if no events. This can reset the sequence counter to 0.
                 // Note: we intentionally checkpoint the batch regardless of function 
                 // success/failure. EventHub doesn't support any sort "poison event" model,
@@ -186,6 +193,14 @@ namespace Microsoft.Azure.WebJobs.EventHubs
                 if (hasEvents)
                 {
                     await CheckpointAsync(context);
+                }
+            }
+
+            private async Task TryExecuteWithLoggingAsync(TriggeredFunctionData input, EventData message)
+            {
+                using (_logger.BeginScope(GetLinksScope(message)))
+                {
+                    await _executor.TryExecuteAsync(input, _cts.Token);
                 }
             }
 
@@ -227,6 +242,54 @@ namespace Microsoft.Azure.WebJobs.EventHubs
             async Task ICheckpointer.CheckpointAsync(PartitionContext context)
             {
                 await context.CheckpointAsync();
+            }
+
+            private Dictionary<string, object> GetLinksScope(EventData message)
+            {
+                if (TryGetLinkedActivity(message, out var link))
+                {
+                    return new Dictionary<string, object> {["Links"] = new[] {link}};
+                }
+
+                return EmptyScope;
+            }
+
+            private Dictionary<string, object> GetLinksScope(EventData[] messages)
+            {
+                List<Activity> links = null;
+
+                foreach (var message in messages)
+                {
+                    if (TryGetLinkedActivity(message, out var link))
+                    {
+                        if (links == null)
+                        {
+                            links = new List<Activity>(messages.Length);
+                        }
+
+                        links.Add(link);
+                    }
+                }
+
+                if (links != null)
+                {
+                    return new Dictionary<string, object> {["Links"] = links};
+                }
+
+                return EmptyScope;
+            }
+
+            private bool TryGetLinkedActivity(EventData message, out Activity link)
+            {
+                link = null;
+
+                if (!message.Properties.ContainsKey("Diagnostic-Id"))
+                {
+                    return false;
+                }
+
+                link = message.ExtractActivity();
+                return true;
             }
         }
     }
