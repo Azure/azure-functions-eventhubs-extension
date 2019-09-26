@@ -4,6 +4,7 @@
 using System;
 using System.Text;
 using System.Threading.Tasks;
+using Microsoft.Azure.Amqp;
 using Microsoft.Azure.EventHubs;
 using Microsoft.Azure.EventHubs.Processor;
 using Microsoft.Azure.WebJobs.Description;
@@ -161,7 +162,22 @@ namespace Microsoft.Azure.WebJobs.EventHubs
 
                     if (!string.IsNullOrEmpty(partitionKey))
                     {
-                        byte[] body = o.GetValue("Body", StringComparison.OrdinalIgnoreCase)?.ToObject<byte[]>();
+                        byte[] body;
+                        JToken jToken = o.GetValue("Body", StringComparison.OrdinalIgnoreCase);
+                        if (jToken is JObject)
+                        {
+                            body = Encoding.UTF8.GetBytes(o.GetValue("Body", StringComparison.OrdinalIgnoreCase).ToObject<JObject>().ToString());
+                        }
+                        else if (jToken is JValue)
+                        {
+                            body = Encoding.UTF8.GetBytes(o.GetValue("Body", StringComparison.OrdinalIgnoreCase).ToString());
+                        }
+                        else
+                        {
+                            body = o.GetValue("Body", StringComparison.OrdinalIgnoreCase)?.ToObject<byte[]>();
+                        }
+                        
+
                         return new EventDataEx(body)
                         {
                             PartitionKey = partitionKey
