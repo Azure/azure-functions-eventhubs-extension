@@ -13,6 +13,7 @@ using Microsoft.Azure.WebJobs.Host.Config;
 using Microsoft.Azure.WebJobs.Host.TestCommon;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Xunit;
 
@@ -22,6 +23,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
     {
         private const string TestHubName = "webjobstesthub";
         private const int Timeout = 30000;
+        private const string JsonDataField = "data";
         private static EventWaitHandle _eventWait;
         private static string _testId;
         private static List<string> _results;
@@ -94,11 +96,11 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
         }
 
         [Fact]
-        public async Task EventHub_AsyncCollector_Json()
+        public async Task EventHub_AsyncCollector_Json_Body_Json()
         {
             using (JobHost host = BuildHost<EventHubParitionKeyTestJobs>())
             {
-                var method = typeof(EventHubParitionKeyTestJobs).GetMethod("SendEvents_Json_TestHub", BindingFlags.Static | BindingFlags.Public);
+                var method = typeof(EventHubParitionKeyTestJobs).GetMethod("SendEvents_Json_Body_Json_TestHub", BindingFlags.Static | BindingFlags.Public);
                 _eventWait = new ManualResetEvent(initialState: false);
                 await host.CallAsync(method, new { input = _testId });
 
@@ -107,6 +109,39 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 Assert.True(result);
             }
         }
+
+
+        [Fact]
+        public async Task EventHub_AsyncCollector_Json_Body_Jarray_Bytes()
+        {
+            using (JobHost host = BuildHost<EventHubParitionKeyTestJobs>())
+            {
+                var method = typeof(EventHubParitionKeyTestJobs).GetMethod("SendEvents_Json_Body_Jarray_Bytes_TestHub", BindingFlags.Static | BindingFlags.Public);
+                _eventWait = new ManualResetEvent(initialState: false);
+                await host.CallAsync(method, new { input = _testId });
+
+                bool result = _eventWait.WaitOne(Timeout);
+
+                Assert.True(result);
+            }
+        }
+
+
+        [Fact]
+        public async Task EventHub_AsyncCollector_Json_Body_Bytes()
+        {
+            using (JobHost host = BuildHost<EventHubParitionKeyTestJobs>())
+            {
+                var method = typeof(EventHubParitionKeyTestJobs).GetMethod("SendEvents_Json_Body_Bytes_TestHub", BindingFlags.Static | BindingFlags.Public);
+                _eventWait = new ManualResetEvent(initialState: false);
+                await host.CallAsync(method, new { input = _testId });
+
+                bool result = _eventWait.WaitOne(Timeout);
+
+                Assert.True(result);
+            }
+        }
+
 
         public class EventHubTestSingleDispatchJobs
         {
@@ -220,14 +255,18 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 }
             }
 
+
             /// <summary>
             /// Test sending partitioned output using Json extended properties
+            /// Test body content contains Json
             /// </summary>
-            public static async Task SendEvents_Json_TestHub(
+            public static async Task SendEvents_Json_Body_Json_TestHub(
                 string input,
                 [EventHub(TestHubName)] IAsyncCollector<string> collector)
             {
+                var body = new JObject();
                 byte[] bytes = Encoding.UTF8.GetBytes(input);
+                body[JsonDataField] = bytes;
 
                 // Send event without PK
                 await collector.AddAsync(input);
@@ -237,8 +276,60 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 {
                     var evt = new JObject();
                     evt["PartitionKey"] = "test_pk" + i;
-                    evt["Body"] = bytes;
+                    evt["Body"] = body;
                     await collector.AddAsync(evt.ToString());
+                }
+            }
+
+            /// <summary>
+            /// Test sending partitioned output using Json extended properties
+            /// Test body content contains JArray bytes[]
+            /// </summary>
+            public static async Task SendEvents_Json_Body_Jarray_Bytes_TestHub(
+                string input,
+                [EventHub(TestHubName)] IAsyncCollector<string> collector)
+            {
+                byte[] bytes = Encoding.UTF8.GetBytes(input);
+                var a = new JArray();
+                for (int i=0; i < bytes.Length; i++)
+                {
+                    a.Add((Object)bytes[i]);
+                }
+                // Send event without PK
+                await collector.AddAsync(input);
+
+                // Send event with different PKs
+                for (int i = 0; i < 5; i++)
+                {
+                    var evt = new JObject();
+                    evt["PartitionKey"] = "test_pk" + i;
+                    evt["Body"] = a;
+                    var evt_string = evt.ToString();
+                    await collector.AddAsync(evt_string);
+                }
+            }
+
+
+            /// <summary>
+            /// Test sending partitioned output using Json extended properties
+            /// Test body content contains bytes[]
+            /// </summary>
+            public static async Task SendEvents_Json_Body_Bytes_TestHub(
+                string input,
+                [EventHub(TestHubName)] IAsyncCollector<string> collector)
+            {
+                byte[] bytes = Encoding.UTF8.GetBytes(input);
+                // Send event without PK
+                await collector.AddAsync(input);
+
+                // Send event with different PKs
+                for (int i = 0; i < 5; i++)
+                {
+                    var evt = new JObject();
+                    evt["PartitionKey"] = "test_pk" + i;
+                    evt["Body"] = bytes;
+                    var evt_string = evt.ToString();
+                    await collector.AddAsync(evt_string);
                 }
             }
 
@@ -247,6 +338,23 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 foreach (EventData eventData in events)
                 {
                     string message = Encoding.UTF8.GetString(eventData.Body);
+                    if (IsJsonObject(message))
+                    {
+                        JObject o = JObject.Parse(message);
+                        string data = Encoding.UTF8.GetString(o.GetValue(JsonDataField).ToObject<byte[]>());
+
+                        // filter for the ID the current test is using
+                        if (data == _testId)
+                        {
+                            _results.Add(eventData.SystemProperties.PartitionKey);
+                            _results.Sort();
+
+                            if (_results.Count == 6 && _results[5] == "test_pk4")
+                            {
+                                _eventWait.Set();
+                            }
+                        }
+                    }
 
                     // filter for the ID the current test is using
                     if (message == _testId)
@@ -260,6 +368,16 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                         }
                     }
                 }
+            }
+            private static bool IsJsonObject(string input)
+            {
+                if (string.IsNullOrEmpty(input))
+                {
+                    return false;
+                }
+
+                input = input.Trim();
+                return (input.StartsWith("{", StringComparison.OrdinalIgnoreCase) && input.EndsWith("}", StringComparison.OrdinalIgnoreCase));
             }
         }
 
