@@ -95,7 +95,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
         {
             var collector = new TestEventHubAsyncCollector();
 
-            // Trip the 256k EventHub limit.
+            // Trip the 1024k EventHub limit.
             for (int i = 0; i < 10; i++)
             {
                 var e1 = new EventData(new byte[10 * 1024]);
@@ -106,7 +106,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
             Assert.Empty(collector.SentEvents);
 
             // This will push it over the theshold
-            for (int i = 0; i < 20; i++)
+            for (int i = 0; i < 100; i++)
             {
                 var e1 = new EventData(new byte[10 * 1024]);
                 await collector.AddAsync(e1);
@@ -120,8 +120,8 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
         {
             var collector = new TestEventHubAsyncCollector();
 
-            // event hub max is 256k payload.
-            var hugePayload = new byte[300 * 1024];
+            // event hub max is 1024k payload.
+            var hugePayload = new byte[1100 * 1024];
             var e1 = new EventData(hugePayload);
 
             try
