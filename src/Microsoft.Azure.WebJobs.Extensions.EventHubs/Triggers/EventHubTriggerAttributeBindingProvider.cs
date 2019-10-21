@@ -59,19 +59,32 @@ namespace Microsoft.Azure.WebJobs.EventHubs
             string consumerGroup = attribute.ConsumerGroup ?? PartitionReceiver.DefaultConsumerGroupName;
             string resolvedConsumerGroup = _nameResolver.ResolveWholeString(consumerGroup);
 
+            string connectionString = null;
             if (!string.IsNullOrWhiteSpace(attribute.Connection))
             {
                 attribute.Connection = _nameResolver.ResolveWholeString(attribute.Connection);
-                var connectionString = _config.GetConnectionStringOrSetting(attribute.Connection);
+                connectionString = _config.GetConnectionStringOrSetting(attribute.Connection);
                 _options.Value.AddReceiver(resolvedEventHubName, connectionString);
             }
 
             var eventHostListener = _options.Value.GetEventProcessorHost(_config, resolvedEventHubName, resolvedConsumerGroup);
 
+            string storageConnectionString = _config.GetWebJobsConnectionString(ConnectionStringNames.Storage);
+
             Func<ListenerFactoryContext, bool, Task<IListener>> createListener =
              (factoryContext, singleDispatch) =>
              {
-                 IListener listener = new EventHubListener(factoryContext.Executor, eventHostListener, singleDispatch, _options.Value, _logger);
+                 IListener listener = new EventHubListener(
+                                                factoryContext.Descriptor.Id,
+                                                resolvedEventHubName,
+                                                resolvedConsumerGroup,
+                                                connectionString,
+                                                storageConnectionString,
+                                                factoryContext.Executor,
+                                                eventHostListener,
+                                                singleDispatch,
+                                                _options.Value,
+                                                _logger);
                  return Task.FromResult(listener);
              };
 

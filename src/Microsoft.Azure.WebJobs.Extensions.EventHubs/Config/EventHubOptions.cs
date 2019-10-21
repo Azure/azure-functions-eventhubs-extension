@@ -330,7 +330,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs
             return sb.ToString();
         }
 
-        private static string GetEventHubNamespace(EventHubsConnectionStringBuilder connectionString)
+        internal static string GetEventHubNamespace(EventHubsConnectionStringBuilder connectionString)
         {
             // EventHubs only have 1 endpoint. 
             var url = connectionString.Endpoint;
