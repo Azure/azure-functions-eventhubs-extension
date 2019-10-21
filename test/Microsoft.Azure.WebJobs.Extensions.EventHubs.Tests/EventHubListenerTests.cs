@@ -9,9 +9,12 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Azure.EventHubs;
 using Microsoft.Azure.EventHubs.Processor;
+using Microsoft.Azure.WebJobs.EventHubs.Listeners;
 using Microsoft.Azure.WebJobs.Host.Executors;
+using Microsoft.Azure.WebJobs.Host.Scale;
 using Microsoft.Azure.WebJobs.Host.TestCommon;
 using Microsoft.Extensions.Logging;
+using Microsoft.WindowsAzure.Storage.Blob;
 using Moq;
 using Xunit;
 
@@ -190,6 +193,37 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
             Assert.Equal("An Event Hub exception of type 'LeaseLostException' was thrown from Partition Id: '123', Owner: 'def', EventHubPath: 'abc'. This exception type is typically a result of Event Hub processor rebalancing and can be safely ignored.", msg.FormattedMessage);
             Assert.Null(msg.Exception);
             Assert.Equal(LogLevel.Information, msg.Level);
+        }
+
+        [Fact]
+        public void GetMonitor_ReturnsExpectedValue()
+        {
+            var functionId = "FunctionId";
+            var eventHubName = "EventHubName";
+            var consumerGroup = "ConsumerGroup";
+            var storageUri = new Uri("https://eventhubsteststorageaccount.blob.core.windows.net/");
+            var testLogger = new TestLogger("Test");
+            var listener = new EventHubListener(
+                                    functionId,
+                                    eventHubName,
+                                    consumerGroup,
+                                    "Endpoint=sb://test.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=abc123=",
+                                    "DefaultEndpointsProtocol=https;AccountName=EventHubScaleMonitorFakeTestAccount;AccountKey=ABCDEFG;EndpointSuffix=core.windows.net",
+                                    new Mock<ITriggeredFunctionExecutor>(MockBehavior.Strict).Object,
+                                    null,
+                                    false,
+                                    new EventHubOptions(),
+                                    testLogger,
+                                    new Mock<CloudBlobContainer>(MockBehavior.Strict, new Uri("https://eventhubsteststorageaccount.blob.core.windows.net/azure-webjobs-eventhub")).Object);
+
+            IScaleMonitor scaleMonitor = listener.GetMonitor();
+
+            Assert.Equal(typeof(EventHubsScaleMonitor), scaleMonitor.GetType());
+            Assert.Equal($"{functionId}-EventHubTrigger-{eventHubName}-{consumerGroup}".ToLower(), scaleMonitor.Descriptor.Id);
+
+            var scaleMonitor2 = listener.GetMonitor();
+
+            Assert.Same(scaleMonitor, scaleMonitor2);
         }
 
         private class NoopLoggerScope : IDisposable
