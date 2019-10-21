@@ -9,15 +9,23 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Azure.EventHubs;
 using Microsoft.Azure.EventHubs.Processor;
+using Microsoft.Azure.WebJobs.EventHubs.Listeners;
 using Microsoft.Azure.WebJobs.Host.Executors;
 using Microsoft.Azure.WebJobs.Host.Listeners;
+using Microsoft.Azure.WebJobs.Host.Scale;
 using Microsoft.Extensions.Logging;
+using Microsoft.WindowsAzure.Storage.Blob;
 
 namespace Microsoft.Azure.WebJobs.EventHubs
 {
-    internal sealed class EventHubListener : IListener, IEventProcessorFactory
+    internal sealed class EventHubListener : IListener, IEventProcessorFactory, IScaleMonitorProvider
     {
         private static readonly Dictionary<string, object> EmptyScope = new Dictionary<string, object>();
+        private readonly string _functionId;
+        private readonly string _eventHubName;
+        private readonly string _consumerGroup;
+        private readonly string _connectionString;
+        private readonly string _storageConnectionString;
         private readonly ITriggeredFunctionExecutor _executor;
         private readonly EventProcessorHost _eventProcessorHost;
         private readonly bool _singleDispatch;
@@ -25,13 +33,32 @@ namespace Microsoft.Azure.WebJobs.EventHubs
         private readonly ILogger _logger;
         private bool _started;
 
-        public EventHubListener(ITriggeredFunctionExecutor executor, EventProcessorHost eventProcessorHost, bool singleDispatch, EventHubOptions options, ILogger logger)
+        private Lazy<EventHubsScaleMonitor> _scaleMonitor;
+
+        public EventHubListener(
+            string functionId,
+            string eventHubName,
+            string consumerGroup,
+            string connectionString,
+            string storageConnectionString,
+            ITriggeredFunctionExecutor executor,
+            EventProcessorHost eventProcessorHost,
+            bool singleDispatch,
+            EventHubOptions options,
+            ILogger logger,
+            CloudBlobContainer blobContainer = null)
         {
+            _functionId = functionId;
+            _eventHubName = eventHubName;
+            _consumerGroup = consumerGroup;
+            _connectionString = connectionString;
+            _storageConnectionString = storageConnectionString;
             _executor = executor;
             _eventProcessorHost = eventProcessorHost;
             _singleDispatch = singleDispatch;
             _options = options;
             _logger = logger;
+            _scaleMonitor = new Lazy<EventHubsScaleMonitor>(() => new EventHubsScaleMonitor(_functionId, _eventHubName, _consumerGroup, _connectionString, _storageConnectionString, _logger, blobContainer));
         }
 
         void IListener.Cancel()
@@ -61,6 +88,11 @@ namespace Microsoft.Azure.WebJobs.EventHubs
         IEventProcessor IEventProcessorFactory.CreateEventProcessor(PartitionContext context)
         {
             return new EventProcessor(_options, _executor, _logger, _singleDispatch);
+        }
+
+        public IScaleMonitor GetMonitor()
+        {
+            return _scaleMonitor.Value;
         }
 
         /// <summary>
