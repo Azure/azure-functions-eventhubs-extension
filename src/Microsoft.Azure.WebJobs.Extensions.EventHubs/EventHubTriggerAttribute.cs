@@ -36,5 +36,11 @@ namespace Microsoft.Azure.WebJobs
         /// Gets or sets the optional app setting name that contains the Event Hub connection string. If missing, tries to use a registered event hub receiver.
         /// </summary>
         public string Connection { get; set; }
+
+        /// <summary>
+        /// Gets or sets the optional setting to checkpoint on failures. If true (default), it will always checkpoint processed messages, even on exceptions.
+        /// If false, it will not checkpoint messages if uncaught exceptions occurred.
+        /// </summary>
+        public bool CheckpointOnFailure { get; set; } = true;
     }
 }

@@ -45,7 +45,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
             loggerMock.Setup(l => l.BeginScope(It.IsAny<object>())).Returns(new NoopLoggerScope());
             var executor = new Mock<ITriggeredFunctionExecutor>(MockBehavior.Strict);
             executor.Setup(p => p.TryExecuteAsync(It.IsAny<TriggeredFunctionData>(), It.IsAny<CancellationToken>())).ReturnsAsync(new FunctionResult(true));
-            var eventProcessor = new EventHubListener.EventProcessor(options, executor.Object, loggerMock.Object, true, checkpointer.Object);
+            var eventProcessor = new EventHubListener.EventProcessor(options, executor.Object, loggerMock.Object, true, true, checkpointer.Object);
 
             for (int i = 0; i < 100; i++)
             {
@@ -75,7 +75,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
             loggerMock.Setup(l => l.BeginScope(It.IsAny<object>())).Returns(new NoopLoggerScope());
             var executor = new Mock<ITriggeredFunctionExecutor>(MockBehavior.Strict);
             executor.Setup(p => p.TryExecuteAsync(It.IsAny<TriggeredFunctionData>(), It.IsAny<CancellationToken>())).ReturnsAsync(new FunctionResult(true));
-            var eventProcessor = new EventHubListener.EventProcessor(options, executor.Object, loggerMock.Object, false, checkpointer.Object);
+            var eventProcessor = new EventHubListener.EventProcessor(options, executor.Object, loggerMock.Object, false, true, checkpointer.Object);
 
             for (int i = 0; i < 100; i++)
             {
@@ -119,7 +119,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
             var loggerMock = new Mock<ILogger>(MockBehavior.Strict);
             loggerMock.Setup(l => l.BeginScope(It.IsAny<object>())).Returns(new NoopLoggerScope());
 
-            var eventProcessor = new EventHubListener.EventProcessor(options, executor.Object, loggerMock.Object, true, checkpointer.Object);
+            var eventProcessor = new EventHubListener.EventProcessor(options, executor.Object, loggerMock.Object, true, true, checkpointer.Object);
 
             await eventProcessor.ProcessEventsAsync(partitionContext, events);
 
@@ -134,7 +134,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
             var checkpointer = new Mock<EventHubListener.ICheckpointer>(MockBehavior.Strict);
             var executor = new Mock<ITriggeredFunctionExecutor>(MockBehavior.Strict);
             var loggerMock = new Mock<ILogger>(MockBehavior.Strict);
-            var eventProcessor = new EventHubListener.EventProcessor(options, executor.Object, loggerMock.Object, true, checkpointer.Object);
+            var eventProcessor = new EventHubListener.EventProcessor(options, executor.Object, loggerMock.Object, true, true, checkpointer.Object);
 
             await eventProcessor.CloseAsync(partitionContext, CloseReason.Shutdown);
 
@@ -149,7 +149,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
             var checkpointer = new Mock<EventHubListener.ICheckpointer>(MockBehavior.Strict);
             var executor = new Mock<ITriggeredFunctionExecutor>(MockBehavior.Strict);
             var testLogger = new TestLogger("Test");
-            var eventProcessor = new EventHubListener.EventProcessor(options, executor.Object, testLogger, true, checkpointer.Object);
+            var eventProcessor = new EventHubListener.EventProcessor(options, executor.Object, testLogger, true, true, checkpointer.Object);
 
             var ex = new InvalidOperationException("My InvalidOperationException!");
 
@@ -168,7 +168,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
             var checkpointer = new Mock<EventHubListener.ICheckpointer>(MockBehavior.Strict);
             var executor = new Mock<ITriggeredFunctionExecutor>(MockBehavior.Strict);
             var testLogger = new TestLogger("Test");
-            var eventProcessor = new EventHubListener.EventProcessor(options, executor.Object, testLogger, true, checkpointer.Object);
+            var eventProcessor = new EventHubListener.EventProcessor(options, executor.Object, testLogger, true, true, checkpointer.Object);
 
             // ctor is private
             var constructor = typeof(ReceiverDisconnectedException)
@@ -213,6 +213,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
                                     null,
                                     false,
                                     new EventHubOptions(),
+                                    true,
                                     testLogger,
                                     new Mock<CloudBlobContainer>(MockBehavior.Strict, new Uri("https://eventhubsteststorageaccount.blob.core.windows.net/azure-webjobs-eventhub")).Object);
 

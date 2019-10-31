@@ -30,6 +30,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs
         private readonly EventProcessorHost _eventProcessorHost;
         private readonly bool _singleDispatch;
         private readonly EventHubOptions _options;
+        private readonly bool _checkpointOnFailure;
         private readonly ILogger _logger;
         private bool _started;
 
@@ -45,6 +46,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs
             EventProcessorHost eventProcessorHost,
             bool singleDispatch,
             EventHubOptions options,
+            bool checkpointOnFailure,
             ILogger logger,
             CloudBlobContainer blobContainer = null)
         {
@@ -57,6 +59,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs
             _eventProcessorHost = eventProcessorHost;
             _singleDispatch = singleDispatch;
             _options = options;
+            _checkpointOnFailure = checkpointOnFailure;
             _logger = logger;
             _scaleMonitor = new Lazy<EventHubsScaleMonitor>(() => new EventHubsScaleMonitor(_functionId, _eventHubName, _consumerGroup, _connectionString, _storageConnectionString, _logger, blobContainer));
         }
@@ -87,7 +90,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs
 
         IEventProcessor IEventProcessorFactory.CreateEventProcessor(PartitionContext context)
         {
-            return new EventProcessor(_options, _executor, _logger, _singleDispatch);
+            return new EventProcessor(_options, _executor, _logger, _singleDispatch, _checkpointOnFailure);
         }
 
         public IScaleMonitor GetMonitor()
@@ -109,6 +112,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs
         {
             private readonly ITriggeredFunctionExecutor _executor;
             private readonly bool _singleDispatch;
+            private readonly bool _checkpointOnFailure;
             private readonly ILogger _logger;
             private readonly CancellationTokenSource _cts = new CancellationTokenSource();
             private readonly ICheckpointer _checkpointer;
@@ -116,11 +120,12 @@ namespace Microsoft.Azure.WebJobs.EventHubs
             private int _batchCounter = 0;
             private bool _disposed = false;
 
-            public EventProcessor(EventHubOptions options, ITriggeredFunctionExecutor executor, ILogger logger, bool singleDispatch, ICheckpointer checkpointer = null)
+            public EventProcessor(EventHubOptions options, ITriggeredFunctionExecutor executor, ILogger logger, bool singleDispatch, bool checkpointOnFailure, ICheckpointer checkpointer = null)
             {
                 _checkpointer = checkpointer ?? this;
                 _executor = executor;
                 _singleDispatch = singleDispatch;
+                _checkpointOnFailure = checkpointOnFailure;
                 _batchCheckpointFrequency = options.BatchCheckpointFrequency;
                 _logger = logger;
             }
@@ -165,12 +170,13 @@ namespace Microsoft.Azure.WebJobs.EventHubs
                     Events = messages.ToArray(),
                     PartitionContext = context
                 };
+                var isSuccessful = true;
 
                 if (_singleDispatch)
                 {
                     // Single dispatch
                     int eventCount = triggerInput.Events.Length;
-                    List<Task> invocationTasks = new List<Task>();
+                    List<Task<FunctionResult>> invocationTasks = new List<Task<FunctionResult>>();
                     for (int i = 0; i < eventCount; i++)
                     {
                         if (_cts.IsCancellationRequested)
@@ -183,14 +189,15 @@ namespace Microsoft.Azure.WebJobs.EventHubs
                             TriggerValue = triggerInput.GetSingleEventTriggerInput(i)
                         };
 
-                        Task task = TryExecuteWithLoggingAsync(input, triggerInput.Events[i]);
+                        var task = TryExecuteWithLoggingAsync(input, triggerInput.Events[i]);
                         invocationTasks.Add(task);
                     }
 
                     // Drain the whole batch before taking more work
                     if (invocationTasks.Count > 0)
                     {
-                        await Task.WhenAll(invocationTasks);
+                        var results = await Task.WhenAll(invocationTasks);
+                        isSuccessful = results.All(result => result.Succeeded);
                     }
                 }
                 else
@@ -203,7 +210,8 @@ namespace Microsoft.Azure.WebJobs.EventHubs
 
                     using (_logger.BeginScope(GetLinksScope(triggerInput.Events)))
                     {
-                        await _executor.TryExecuteAsync(input, _cts.Token);
+                        var result = await _executor.TryExecuteAsync(input, _cts.Token);
+                        isSuccessful = result.Succeeded;
                     }
                 }
 
@@ -217,22 +225,24 @@ namespace Microsoft.Azure.WebJobs.EventHubs
 
                 // Checkpoint if we processed any events.
                 // Don't checkpoint if no events. This can reset the sequence counter to 0.
-                // Note: we intentionally checkpoint the batch regardless of function 
+                // Note: by default we intentionally checkpoint the batch regardless of function 
                 // success/failure. EventHub doesn't support any sort "poison event" model,
                 // so that is the responsibility of the user's function currently. E.g.
                 // the function should have try/catch handling around all event processing
                 // code, and capture/log/persist failed events, since they won't be retried.
-                if (hasEvents)
+                // With the optional parameter CheckpointOnFailure on 'false', it won't checkpoint
+                // when exceptions were found. 
+                if (hasEvents && (_checkpointOnFailure || isSuccessful))
                 {
                     await CheckpointAsync(context);
                 }
             }
 
-            private async Task TryExecuteWithLoggingAsync(TriggeredFunctionData input, EventData message)
+            private async Task<FunctionResult> TryExecuteWithLoggingAsync(TriggeredFunctionData input, EventData message)
             {
                 using (_logger.BeginScope(GetLinksScope(message)))
                 {
-                    await _executor.TryExecuteAsync(input, _cts.Token);
+                    return await _executor.TryExecuteAsync(input, _cts.Token);
                 }
             }
 

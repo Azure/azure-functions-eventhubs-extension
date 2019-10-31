@@ -58,6 +58,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs
 
             string consumerGroup = attribute.ConsumerGroup ?? PartitionReceiver.DefaultConsumerGroupName;
             string resolvedConsumerGroup = _nameResolver.ResolveWholeString(consumerGroup);
+            bool checkpointOnFailure = attribute.CheckpointOnFailure;
 
             string connectionString = null;
             if (!string.IsNullOrWhiteSpace(attribute.Connection))
@@ -84,6 +85,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs
                                                 eventHostListener,
                                                 singleDispatch,
                                                 _options.Value,
+                                                checkpointOnFailure,
                                                 _logger);
                  return Task.FromResult(listener);
              };
