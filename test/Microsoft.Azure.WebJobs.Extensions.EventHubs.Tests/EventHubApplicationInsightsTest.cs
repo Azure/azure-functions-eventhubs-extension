@@ -15,12 +15,17 @@ using Microsoft.ApplicationInsights.DataContracts;
 using Microsoft.ApplicationInsights.Extensibility;
 using Microsoft.ApplicationInsights.Extensibility.Implementation;
 using Microsoft.Azure.EventHubs;
+using Microsoft.Azure.EventHubs.Processor;
+using Microsoft.Azure.WebJobs.EventHubs;
+using Microsoft.Azure.WebJobs.EventHubs.UnitTests;
+using Microsoft.Azure.WebJobs.Host.Executors;
 using Microsoft.Azure.WebJobs.Host.TestCommon;
 using Microsoft.Azure.WebJobs.Logging;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Moq;
 using Newtonsoft.Json;
 using Xunit;
 
@@ -35,7 +40,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
         private static string _testPrefix;
         private readonly string _connection;
         private readonly string _endpoint;
-        private static int _receivedMessageCount = -1;
+
         private readonly EventHubsConnectionStringBuilder _connectionBuilder;
         private readonly JsonSerializerSettings jsonSettingThrowOnError = new JsonSerializerSettings
         {
@@ -47,7 +52,6 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 
         public EventHubApplicationInsightsTests()
         {
-            _receivedMessageCount = -1;
             _eventWait = new ManualResetEvent(initialState: false);
             _testPrefix = Guid.NewGuid().ToString();
 
@@ -116,13 +120,12 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
         [Fact]
         public async Task EventHub_MultipleDispatch_BatchSend()
         {
-            object receivedEventsCount = (object)-1;
             using (var host = BuildHost<EventHubTestMultipleDispatchJobs>())
             {
                 await host.StartAsync();
 
                 var method = typeof(EventHubTestMultipleDispatchJobs).GetMethod("SendEvents_TestHub", BindingFlags.Static | BindingFlags.Public);
-                await host.GetJobHost().CallAsync(method, new { numEvents = 5, input = _testPrefix });
+                await host.GetJobHost().CallAsync(method, new { input = _testPrefix });
 
                 bool result = _eventWait.WaitOne(Timeout);
                 Assert.True(result);
@@ -150,10 +153,12 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 manualCallRequest.Id,
                 LogCategories.Bindings);
 
-            var ehTriggerRequests = requests.Where(r => r.Context.Operation.Name == "ProcessMultipleEvents");
-            List<TestLink> actualLinks = new List<TestLink>();
+            var ehTriggerRequests = requests.Where(r => r.Context.Operation.Name == "ProcessMultipleEvents").ToList();
+            List<TestLink> allLinks = new List<TestLink>();
+
             foreach (var ehTriggerRequest in ehTriggerRequests)
             {
+                // if there are links
                 if (ehTriggerRequest.Properties.TryGetValue("_MS.links", out var linksStr))
                 {
                     ValidateEventHubRequest(
@@ -166,19 +171,32 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                     Assert.NotNull(ehTriggerRequest.Context.Operation.Id);
                     Assert.Null(ehTriggerRequest.Context.Operation.ParentId);
 
-                    actualLinks.AddRange(JsonConvert.DeserializeObject<TestLink[]>(linksStr, jsonSettingThrowOnError));
+                    var currentRequestAndTestLinks = JsonConvert.DeserializeObject<TestLink[]>(linksStr, jsonSettingThrowOnError)
+                        .Where(l => l.operation_Id == manualOperationId)
+                        .ToArray();
+                    allLinks.AddRange(currentRequestAndTestLinks);
+
+                    Assert.True(ehTriggerRequest.Properties.TryGetValue("receivedMessages", out var receivedMessagesPropStr));
+                    Assert.Equal(int.Parse(receivedMessagesPropStr), currentRequestAndTestLinks.Length);
+                }
+                // otherwise it was triggered with single message, there is no link
+                else
+                {
+                    ValidateEventHubRequest(
+                        ehTriggerRequest,
+                        true,
+                        "ProcessMultipleEvents",
+                        manualOperationId,
+                        ehOutDependency.Id);
                 }
             }
 
-            Assert.Equal(_receivedMessageCount, actualLinks.Count); 
-
-            var currentTestLinks = actualLinks.Where(l => l.operation_Id == manualOperationId).ToArray();
-
-            // there should be 5 relevant links
-            // current Event Hubs SDK does not generate unique Id per message, 
-            // so they all share the same Id
-            Assert.Equal(_receivedMessageCount, currentTestLinks.Length); 
-            Assert.Equal(_receivedMessageCount, currentTestLinks.Count(l => l.id == ehOutDependency.Id));
+            // there should be 5 message processings, but we don't know how many links
+            // as message batching could be done differently (split into single processings and batches)
+            // we only check that all links are from relevant messages.
+            // current Event Hubs SDK does not generate unique Id per message, so all messages share the same Id
+            Assert.Equal(EventHubTestMultipleDispatchJobs.ProcessedEvents, allLinks.Count);
+            Assert.Equal(allLinks.Count, allLinks.Count(l => l.id == ehOutDependency.Id));
         }
 
         [Fact]
@@ -243,6 +261,77 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 Assert.Contains(expectedLinks, l => l.operation_Id == link.operation_Id 
                                                     && l.id == link.id);
             }
+        }
+
+        [Fact]
+        public async Task ProcessEvents_SingleDispatch_SystemProperties()
+        {
+            var partitionContext = EventHubTests.GetPartitionContext();
+            var options = new EventHubOptions { BatchCheckpointFrequency = 1 };
+            
+            var checkpointer = new Mock<EventHubListener.ICheckpointer>();
+
+            var loggerMock = new Mock<ILogger>(MockBehavior.Strict);
+            loggerMock.Setup(l => l.BeginScope(It.IsAny<object>())).Returns(new NoopLoggerScope());
+            var executor = new Mock<ITriggeredFunctionExecutor>(MockBehavior.Strict);
+            executor.Setup(p => p.TryExecuteAsync(It.IsAny<TriggeredFunctionData>(), It.IsAny<CancellationToken>())).ReturnsAsync(new FunctionResult(true));
+            var eventProcessor = new EventHubListener.EventProcessor(options, executor.Object, loggerMock.Object, true, checkpointer.Object);
+
+            var diagnosticId = $"00-{ActivityTraceId.CreateRandom().ToHexString()}-{ActivitySpanId.CreateRandom().ToHexString()}-01";
+
+            var eventData = new EventData(new byte[0])
+            {
+                SystemProperties = new EventData.SystemPropertiesCollection(-1, DateTime.Now, "0", "1")
+                {
+                    {"Diagnostic-Id", diagnosticId}
+                }
+            };
+
+            await eventProcessor.ProcessEventsAsync(partitionContext, new[] { eventData });
+
+            Func<Dictionary<string, object>, bool> checkLinksScope = (scope) => scope.TryGetValue("Links", out var links) &&
+                                                                                links is IEnumerable<Activity> linksList &&
+                                                                                linksList.Count() == 1 &&
+                                                                                linksList.Single().ParentId == diagnosticId;
+
+            loggerMock.Verify(l => l.BeginScope(It.Is<Dictionary<string, object>>(s => checkLinksScope(s))), Times.Once);
+        }
+
+        [Fact]
+        public async Task ProcessEvents_SingleDispatch_SystemPropertiesAndApplicationProperties()
+        {
+            var partitionContext = EventHubTests.GetPartitionContext();
+            var options = new EventHubOptions { BatchCheckpointFrequency = 1 };
+
+            var checkpointer = new Mock<EventHubListener.ICheckpointer>();
+
+            var loggerMock = new Mock<ILogger>(MockBehavior.Strict);
+            loggerMock.Setup(l => l.BeginScope(It.IsAny<object>())).Returns(new NoopLoggerScope());
+            var executor = new Mock<ITriggeredFunctionExecutor>(MockBehavior.Strict);
+            executor.Setup(p => p.TryExecuteAsync(It.IsAny<TriggeredFunctionData>(), It.IsAny<CancellationToken>())).ReturnsAsync(new FunctionResult(true));
+            var eventProcessor = new EventHubListener.EventProcessor(options, executor.Object, loggerMock.Object, true, checkpointer.Object);
+
+            var diagnosticId = $"00-{ActivityTraceId.CreateRandom().ToHexString()}-{ActivitySpanId.CreateRandom().ToHexString()}-01";
+
+            var eventData = new EventData(new byte[0])
+            {
+                SystemProperties = new EventData.SystemPropertiesCollection(-1, DateTime.Now, "0", "1")
+                {
+                    {"Diagnostic-Id", diagnosticId}
+                },
+
+                // will be ignored
+                Properties = { ["Diagnostic-Id"] = $"00-{ActivityTraceId.CreateRandom().ToHexString()}-{ActivitySpanId.CreateRandom().ToHexString()}-01" }
+            };
+
+            await eventProcessor.ProcessEventsAsync(partitionContext, new[] { eventData });
+
+            Func<Dictionary<string, object>, bool> checkLinksScope = (scope) => scope.TryGetValue("Links", out var links) &&
+                                                                                links is IEnumerable<Activity> linksList &&
+                                                                                linksList.Count() == 1 &&
+                                                                                linksList.Single().ParentId == diagnosticId;
+
+            loggerMock.Verify(l => l.BeginScope(It.Is<Dictionary<string, object>>(s => checkLinksScope(s))), Times.Once);
         }
 
         private void ValidateEventHubRequest(
@@ -353,10 +442,15 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 
         public class EventHubTestMultipleDispatchJobs
         {
-            public static void SendEvents_TestHub(int numEvents, string input, [EventHub(TestHubName)] out EventData[] events)
+            public static int ProcessedEvents = 0;
+            public const int EventCount = 5;
+            private static readonly object lck = new object();
+            
+            public static void SendEvents_TestHub(string input, [EventHub(TestHubName)] out EventData[] events)
             {
-                events = new EventData[numEvents];
-                for (int i = 0; i < numEvents; i++)
+                ProcessedEvents = 0;
+                events = new EventData[EventCount];
+                for (int i = 0; i < EventCount; i++)
                 {
                     var evt = new EventData(Encoding.UTF8.GetBytes(input + i));
                     events[i] = evt;
@@ -365,10 +459,16 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 
             public static void ProcessMultipleEvents([EventHubTrigger(TestHubName)] string[] events)
             {
-                if (events.Any(e => e.StartsWith(_testPrefix + "4")))
+                var eventsFromCurrentTest = events.Where(e => e.StartsWith(_testPrefix)).ToArray();
+                Activity.Current.AddTag("receivedMessages", eventsFromCurrentTest.Length.ToString());
+                lock (lck)
+                {
+                    ProcessedEvents += eventsFromCurrentTest.Length;
+                }
+                
+                if (ProcessedEvents >= EventCount)
                 {
                     _eventWait.Set();
-                    _receivedMessageCount = events.Length;
                 }
             }
         }
@@ -432,6 +532,13 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
         {
             public string operation_Id { get; set; }
             public string id { get; set; }
+        }
+
+        private class NoopLoggerScope : IDisposable
+        {
+            public void Dispose()
+            {
+            }
         }
     }
 }
