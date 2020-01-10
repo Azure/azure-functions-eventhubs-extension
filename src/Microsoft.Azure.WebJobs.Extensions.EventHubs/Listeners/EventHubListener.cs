@@ -315,13 +315,15 @@ namespace Microsoft.Azure.WebJobs.EventHubs
             {
                 link = null;
 
-                if (!message.Properties.ContainsKey("Diagnostic-Id"))
+                if ((message.SystemProperties.TryGetValue("Diagnostic-Id", out var diagnosticIdObj) || message.Properties.TryGetValue("Diagnostic-Id", out diagnosticIdObj)) 
+                    && diagnosticIdObj is string diagnosticIdString)
                 {
-                    return false;
+                    link = new Activity("Microsoft.Azure.EventHubs.Process");
+                    link.SetParentId(diagnosticIdString);
+                    return true;
                 }
 
-                link = message.ExtractActivity();
-                return true;
+                return false;
             }
         }
     }

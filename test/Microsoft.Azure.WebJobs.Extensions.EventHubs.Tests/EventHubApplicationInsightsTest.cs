@@ -15,12 +15,17 @@ using Microsoft.ApplicationInsights.DataContracts;
 using Microsoft.ApplicationInsights.Extensibility;
 using Microsoft.ApplicationInsights.Extensibility.Implementation;
 using Microsoft.Azure.EventHubs;
+using Microsoft.Azure.EventHubs.Processor;
+using Microsoft.Azure.WebJobs.EventHubs;
+using Microsoft.Azure.WebJobs.EventHubs.UnitTests;
+using Microsoft.Azure.WebJobs.Host.Executors;
 using Microsoft.Azure.WebJobs.Host.TestCommon;
 using Microsoft.Azure.WebJobs.Logging;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Moq;
 using Newtonsoft.Json;
 using Xunit;
 
@@ -245,6 +250,77 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             }
         }
 
+        [Fact]
+        public async Task ProcessEvents_SingleDispatch_SystemProperties()
+        {
+            var partitionContext = EventHubTests.GetPartitionContext();
+            var options = new EventHubOptions { BatchCheckpointFrequency = 1 };
+            
+            var checkpointer = new Mock<EventHubListener.ICheckpointer>();
+
+            var loggerMock = new Mock<ILogger>(MockBehavior.Strict);
+            loggerMock.Setup(l => l.BeginScope(It.IsAny<object>())).Returns(new NoopLoggerScope());
+            var executor = new Mock<ITriggeredFunctionExecutor>(MockBehavior.Strict);
+            executor.Setup(p => p.TryExecuteAsync(It.IsAny<TriggeredFunctionData>(), It.IsAny<CancellationToken>())).ReturnsAsync(new FunctionResult(true));
+            var eventProcessor = new EventHubListener.EventProcessor(options, executor.Object, loggerMock.Object, true, checkpointer.Object);
+
+            var diagnosticId = $"00-{ActivityTraceId.CreateRandom().ToHexString()}-{ActivitySpanId.CreateRandom().ToHexString()}-01";
+
+            var eventData = new EventData(new byte[0])
+            {
+                SystemProperties = new EventData.SystemPropertiesCollection(-1, DateTime.Now, "0", "1")
+                {
+                    {"Diagnostic-Id", diagnosticId}
+                }
+            };
+
+            await eventProcessor.ProcessEventsAsync(partitionContext, new[] { eventData });
+
+            Func<Dictionary<string, object>, bool> checkLinksScope = (scope) => scope.TryGetValue("Links", out var links) &&
+                                                                                links is IEnumerable<Activity> linksList &&
+                                                                                linksList.Count() == 1 &&
+                                                                                linksList.Single().ParentId == diagnosticId;
+
+            loggerMock.Verify(l => l.BeginScope(It.Is<Dictionary<string, object>>(s => checkLinksScope(s))), Times.Once);
+        }
+
+        [Fact]
+        public async Task ProcessEvents_SingleDispatch_SystemPropertiesAndApplicationProperties()
+        {
+            var partitionContext = EventHubTests.GetPartitionContext();
+            var options = new EventHubOptions { BatchCheckpointFrequency = 1 };
+
+            var checkpointer = new Mock<EventHubListener.ICheckpointer>();
+
+            var loggerMock = new Mock<ILogger>(MockBehavior.Strict);
+            loggerMock.Setup(l => l.BeginScope(It.IsAny<object>())).Returns(new NoopLoggerScope());
+            var executor = new Mock<ITriggeredFunctionExecutor>(MockBehavior.Strict);
+            executor.Setup(p => p.TryExecuteAsync(It.IsAny<TriggeredFunctionData>(), It.IsAny<CancellationToken>())).ReturnsAsync(new FunctionResult(true));
+            var eventProcessor = new EventHubListener.EventProcessor(options, executor.Object, loggerMock.Object, true, checkpointer.Object);
+
+            var diagnosticId = $"00-{ActivityTraceId.CreateRandom().ToHexString()}-{ActivitySpanId.CreateRandom().ToHexString()}-01";
+
+            var eventData = new EventData(new byte[0])
+            {
+                SystemProperties = new EventData.SystemPropertiesCollection(-1, DateTime.Now, "0", "1")
+                {
+                    {"Diagnostic-Id", diagnosticId}
+                },
+
+                // will be ignored
+                Properties = { ["Diagnostic-Id"] = $"00-{ActivityTraceId.CreateRandom().ToHexString()}-{ActivitySpanId.CreateRandom().ToHexString()}-01" }
+            };
+
+            await eventProcessor.ProcessEventsAsync(partitionContext, new[] { eventData });
+
+            Func<Dictionary<string, object>, bool> checkLinksScope = (scope) => scope.TryGetValue("Links", out var links) &&
+                                                                                links is IEnumerable<Activity> linksList &&
+                                                                                linksList.Count() == 1 &&
+                                                                                linksList.Single().ParentId == diagnosticId;
+
+            loggerMock.Verify(l => l.BeginScope(It.Is<Dictionary<string, object>>(s => checkLinksScope(s))), Times.Once);
+        }
+
         private void ValidateEventHubRequest(
             RequestTelemetry request,
             bool success,
@@ -432,6 +508,13 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
         {
             public string operation_Id { get; set; }
             public string id { get; set; }
+        }
+
+        private class NoopLoggerScope : IDisposable
+        {
+            public void Dispose()
+            {
+            }
         }
     }
 }
