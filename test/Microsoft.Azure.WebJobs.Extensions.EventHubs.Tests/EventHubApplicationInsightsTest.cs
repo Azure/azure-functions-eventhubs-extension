@@ -271,8 +271,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             
             var checkpointer = new Mock<EventHubListener.ICheckpointer>();
 
-            var loggerMock = new Mock<ILogger>(MockBehavior.Strict);
-            loggerMock.Setup(l => l.BeginScope(It.IsAny<object>())).Returns(new NoopLoggerScope());
+            var loggerMock = new Mock<ILogger>();
             var executor = new Mock<ITriggeredFunctionExecutor>(MockBehavior.Strict);
             executor.Setup(p => p.TryExecuteAsync(It.IsAny<TriggeredFunctionData>(), It.IsAny<CancellationToken>())).ReturnsAsync(new FunctionResult(true));
             var eventProcessor = new EventHubListener.EventProcessor(options, executor.Object, loggerMock.Object, true, checkpointer.Object);
@@ -305,8 +304,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 
             var checkpointer = new Mock<EventHubListener.ICheckpointer>();
 
-            var loggerMock = new Mock<ILogger>(MockBehavior.Strict);
-            loggerMock.Setup(l => l.BeginScope(It.IsAny<object>())).Returns(new NoopLoggerScope());
+            var loggerMock = new Mock<ILogger>();
             var executor = new Mock<ITriggeredFunctionExecutor>(MockBehavior.Strict);
             executor.Setup(p => p.TryExecuteAsync(It.IsAny<TriggeredFunctionData>(), It.IsAny<CancellationToken>())).ReturnsAsync(new FunctionResult(true));
             var eventProcessor = new EventHubListener.EventProcessor(options, executor.Object, loggerMock.Object, true, checkpointer.Object);
@@ -532,13 +530,6 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
         {
             public string operation_Id { get; set; }
             public string id { get; set; }
-        }
-
-        private class NoopLoggerScope : IDisposable
-        {
-            public void Dispose()
-            {
-            }
         }
     }
 }

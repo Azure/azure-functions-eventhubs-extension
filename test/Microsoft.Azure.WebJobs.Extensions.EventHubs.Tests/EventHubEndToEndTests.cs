@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using System.Text;
 using System.Threading;
@@ -11,6 +12,7 @@ using Microsoft.Azure.EventHubs;
 using Microsoft.Azure.WebJobs.Host.TestCommon;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Xunit;
 
 namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
@@ -33,7 +35,8 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
         [Fact]
         public async Task EventHub_SingleDispatch()
         {
-            using (JobHost host = BuildHost<EventHubTestSingleDispatchJobs>())
+            Tuple<JobHost, IHost> tuple = BuildHost<EventHubTestSingleDispatchJobs>();
+            using (var host = tuple.Item1)
             {
                 var method = typeof(EventHubTestSingleDispatchJobs).GetMethod("SendEvent_TestHub", BindingFlags.Static | BindingFlags.Public);
                 var id = Guid.NewGuid().ToString();
@@ -41,13 +44,30 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 
                 bool result = _eventWait.WaitOne(Timeout);
                 Assert.True(result);
+
+                // Wait for checkpointing
+                await Task.Delay(3000);
+
+                IEnumerable<LogMessage> logMessages = tuple.Item2.GetTestLoggerProvider()
+                    .GetAllLogMessages();
+
+                Assert.Equal(logMessages.Where(x => !string.IsNullOrEmpty(x.FormattedMessage)
+                    && x.FormattedMessage.Contains("Trigger Details:")
+                    && x.FormattedMessage.Contains("Offset:")).Count(), 1);
+
+                Assert.True(logMessages.Where(x => !string.IsNullOrEmpty(x.FormattedMessage)
+                    && x.FormattedMessage.Contains("OpenAsync")).Count() > 0);
+
+                Assert.True(logMessages.Where(x => !string.IsNullOrEmpty(x.FormattedMessage)
+                    && x.FormattedMessage.Contains("CheckpointAsync")).Count() > 0);
             }
         }
 
         [Fact]
         public async Task EventHub_MultipleDispatch()
         {
-            using (JobHost host = BuildHost<EventHubTestMultipleDispatchJobs>())
+            Tuple<JobHost, IHost> tuple = BuildHost<EventHubTestMultipleDispatchJobs>();
+            using (var host = tuple.Item1)
             {
                 // send some events BEFORE starting the host, to ensure
                 // the events are received in batch
@@ -57,13 +77,30 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 
                 bool result = _eventWait.WaitOne(Timeout);
                 Assert.True(result);
+
+                // Wait for checkpointing
+                await Task.Delay(3000);
+
+                IEnumerable<LogMessage> logMessages = tuple.Item2.GetTestLoggerProvider()
+                    .GetAllLogMessages();
+
+                Assert.True(logMessages.Where(x => !string.IsNullOrEmpty(x.FormattedMessage)
+                    && x.FormattedMessage.Contains("Trigger Details:")
+                    && x.FormattedMessage.Contains("Offset:")).Count() > 0);
+
+                Assert.True(logMessages.Where(x => !string.IsNullOrEmpty(x.FormattedMessage)
+                    && x.FormattedMessage.Contains("OpenAsync")).Count() > 0);
+
+                Assert.True(logMessages.Where(x => !string.IsNullOrEmpty(x.FormattedMessage)
+                    && x.FormattedMessage.Contains("CheckpointAsync")).Count() > 0);
             }
         }
 
         [Fact]
         public async Task EventHub_PartitionKey()
         {
-            using (JobHost host = BuildHost<EventHubPartitionKeyTestJobs>())
+            Tuple<JobHost, IHost> tuple = BuildHost<EventHubPartitionKeyTestJobs>();
+            using (var host = tuple.Item1)
             {
                 var method = typeof(EventHubPartitionKeyTestJobs).GetMethod("SendEvents_TestHub", BindingFlags.Static | BindingFlags.Public);
                 _eventWait = new ManualResetEvent(initialState: false);
@@ -180,7 +217,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             }
         }
 
-        private JobHost BuildHost<T>()
+        private Tuple<JobHost, IHost> BuildHost<T>()
         {
             JobHost jobHost = null;
 
@@ -198,16 +235,21 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 {
                     b.AddEventHubs(options =>
                     {
+                        options.EventProcessorOptions.EnableReceiverRuntimeMetric = true;
                         options.AddSender(TestHubName, connection);
                         options.AddReceiver(TestHubName, connection);
                     });
+                })
+                .ConfigureLogging(b =>
+                {
+                    b.SetMinimumLevel(LogLevel.Debug);
                 })
                 .Build();
 
             jobHost = host.GetJobHost();
             jobHost.StartAsync().GetAwaiter().GetResult();
 
-            return jobHost;
+            return new Tuple<JobHost, IHost>(jobHost, host);
         }
     }
 }

@@ -4,6 +4,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -15,6 +16,8 @@ using Microsoft.Azure.WebJobs.Host.Listeners;
 using Microsoft.Azure.WebJobs.Host.Scale;
 using Microsoft.Extensions.Logging;
 using Microsoft.WindowsAzure.Storage.Blob;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace Microsoft.Azure.WebJobs.EventHubs
 {
@@ -129,12 +132,14 @@ namespace Microsoft.Azure.WebJobs.EventHubs
             {
                 // signal cancellation for any in progress executions 
                 _cts.Cancel();
-
+                
+                _logger.LogDebug(GetOperationDetails(context, $"CloseAsync, {reason.ToString()}"));
                 return Task.CompletedTask;
             }
 
             public Task OpenAsync(PartitionContext context)
             {
+                _logger.LogDebug(GetOperationDetails(context, "OpenAsync"));
                 return Task.CompletedTask;
             }
 
@@ -166,6 +171,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs
                     PartitionContext = context
                 };
 
+                TriggeredFunctionData input = null;
                 if (_singleDispatch)
                 {
                     // Single dispatch
@@ -178,9 +184,11 @@ namespace Microsoft.Azure.WebJobs.EventHubs
                             break;
                         }
 
-                        var input = new TriggeredFunctionData
+                        EventHubTriggerInput eventHubTriggerInput = triggerInput.GetSingleEventTriggerInput(i);
+                        input = new TriggeredFunctionData
                         {
-                            TriggerValue = triggerInput.GetSingleEventTriggerInput(i)
+                            TriggerValue = eventHubTriggerInput,
+                            TriggerDetails = eventHubTriggerInput.GetTriggerDetails(context)
                         };
 
                         Task task = TryExecuteWithLoggingAsync(input, triggerInput.Events[i]);
@@ -196,9 +204,10 @@ namespace Microsoft.Azure.WebJobs.EventHubs
                 else
                 {
                     // Batch dispatch
-                    var input = new TriggeredFunctionData
+                    input = new TriggeredFunctionData
                     {
-                        TriggerValue = triggerInput
+                        TriggerValue = triggerInput,
+                        TriggerDetails = triggerInput.GetTriggerDetails(context)
                     };
 
                     using (_logger.BeginScope(GetLinksScope(triggerInput.Events)))
@@ -238,9 +247,11 @@ namespace Microsoft.Azure.WebJobs.EventHubs
 
             private async Task CheckpointAsync(PartitionContext context)
             {
+                bool checkpointed = false;
                 if (_batchCheckpointFrequency == 1)
                 {
                     await _checkpointer.CheckpointAsync(context);
+                    checkpointed = true;
                 }
                 else
                 {
@@ -249,7 +260,12 @@ namespace Microsoft.Azure.WebJobs.EventHubs
                     {
                         _batchCounter = 0;
                         await _checkpointer.CheckpointAsync(context);
+                        checkpointed = true;
                     }
+                }
+                if (checkpointed)
+                {
+                    _logger.LogDebug(GetOperationDetails(context, "CheckpointAsync"));
                 }
             }
 
@@ -324,6 +340,54 @@ namespace Microsoft.Azure.WebJobs.EventHubs
                 }
 
                 return false;
+            }
+
+            private string GetOperationDetails(PartitionContext context, string operation)
+            {
+                StringWriter sw = new StringWriter();
+                using (JsonTextWriter writer = new JsonTextWriter(sw) { Formatting = Formatting.None })
+                {
+                    writer.WriteStartObject();
+                    WritePropertyIfNotNull(writer, "operation", operation);
+                    writer.WritePropertyName("partitionContext");
+                    writer.WriteStartObject();
+                    WritePropertyIfNotNull(writer, "partitionId", context.PartitionId);
+                    WritePropertyIfNotNull(writer, "owner", context.Owner);
+                    WritePropertyIfNotNull(writer, "eventHubPath", context.EventHubPath);
+                    writer.WriteEndObject();
+
+                    // Log partition lease
+                    if (context.Lease != null)
+                    {
+                        writer.WritePropertyName("lease");
+                        writer.WriteStartObject();
+                        WritePropertyIfNotNull(writer, "offset", context.Lease.Offset);
+                        WritePropertyIfNotNull(writer, "sequenceNumber", context.Lease.SequenceNumber.ToString());
+                        writer.WriteEndObject();
+                    }
+
+                    // Log RuntimeInformation if EnableReceiverRuntimeMetric is enabled
+                    if (context.RuntimeInformation != null)
+                    {
+                        writer.WritePropertyName("runtimeInformation");
+                        writer.WriteStartObject();
+                        WritePropertyIfNotNull(writer, "lastEnqueuedOffset", context.RuntimeInformation.LastEnqueuedOffset);
+                        WritePropertyIfNotNull(writer, "lastSequenceNumber", context.RuntimeInformation.LastSequenceNumber.ToString());
+                        WritePropertyIfNotNull(writer, "lastEnqueuedTimeUtc", context.RuntimeInformation.LastEnqueuedTimeUtc.ToString("o"));
+                        writer.WriteEndObject();
+                    }
+                    writer.WriteEndObject();
+                }
+                return sw.ToString();
+            }
+
+            private static void WritePropertyIfNotNull(JsonTextWriter writer, string propertyName, string propertyValue)
+            {
+                if (propertyValue != null)
+                {
+                    writer.WritePropertyName(propertyName);
+                    writer.WriteValue(propertyValue);
+                }
             }
         }
     }

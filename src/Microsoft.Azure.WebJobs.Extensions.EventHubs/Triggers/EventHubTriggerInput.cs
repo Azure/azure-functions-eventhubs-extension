@@ -3,12 +3,13 @@
 
 using Microsoft.Azure.EventHubs;
 using Microsoft.Azure.EventHubs.Processor;
+using System.Collections.Generic;
 
 namespace Microsoft.Azure.WebJobs.EventHubs
 {
     // The core object we get when an EventHub is triggered. 
     // This gets converted to the user type (EventData, string, poco, etc) 
-    internal sealed class EventHubTriggerInput      
+    internal sealed class EventHubTriggerInput
     {        
         // If != -1, then only process a single event in this batch. 
         private int _selector = -1;
@@ -51,6 +52,40 @@ namespace Microsoft.Azure.WebJobs.EventHubs
         public EventData GetSingleEventData()
         {
             return this.Events[this._selector];
-        }        
+        }
+
+        public Dictionary<string, string> GetTriggerDetails(PartitionContext context)
+        {
+            if (Events.Length == 0)
+            {
+                return new Dictionary<string, string>();
+            }
+
+            string offset, enqueueTimeUtc, sequenceNumber;
+            if (IsSingleDispatch)
+            {
+                offset = Events[0].SystemProperties?.Offset;
+                enqueueTimeUtc = Events[0].SystemProperties?.EnqueuedTimeUtc.ToString("o");
+                sequenceNumber = Events[0].SystemProperties?.SequenceNumber.ToString();
+            }
+            else
+            {
+                EventData first = Events[0];
+                EventData last = Events[Events.Length - 1];
+
+                offset = $"{first.SystemProperties?.Offset}-{last.SystemProperties?.Offset}";
+                enqueueTimeUtc = $"{first.SystemProperties?.EnqueuedTimeUtc.ToString("o")}-{last.SystemProperties?.EnqueuedTimeUtc.ToString("o")}";
+                sequenceNumber = $"{first.SystemProperties?.SequenceNumber}-{last.SystemProperties?.SequenceNumber}";
+            }
+
+            return new Dictionary<string, string>()
+            {
+                { "PartionId", context.PartitionId },
+                { "Offset", offset },
+                { "EnqueueTimeUtc", enqueueTimeUtc },
+                { "SequenceNumber", sequenceNumber },
+                { "Count", Events.Length.ToString()}
+            };
+        }
     }
 }
