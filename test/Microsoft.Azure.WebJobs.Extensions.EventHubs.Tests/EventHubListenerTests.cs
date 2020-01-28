@@ -48,7 +48,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
 
             for (int i = 0; i < 100; i++)
             {
-                List<EventData> events = new List<EventData>() { new EventData(new byte[0]) };
+                var events = new List<EventData>() { new EventData(new byte[0]) };
                 await eventProcessor.ProcessEventsAsync(partitionContext, events);
             }
 
@@ -77,7 +77,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
 
             for (int i = 0; i < 100; i++)
             {
-                List<EventData> events = new List<EventData>() { new EventData(new byte[0]), new EventData(new byte[0]), new EventData(new byte[0]) };
+                var events = new List<EventData>() { new EventData(new byte[0]), new EventData(new byte[0]), new EventData(new byte[0]) };
                 await eventProcessor.ProcessEventsAsync(partitionContext, events);
             }
 
@@ -97,8 +97,8 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
             var checkpointer = new Mock<EventHubListener.ICheckpointer>(MockBehavior.Strict);
             checkpointer.Setup(p => p.CheckpointAsync(partitionContext)).Returns(Task.CompletedTask);
 
-            List<EventData> events = new List<EventData>();
-            List<FunctionResult> results = new List<FunctionResult>();
+            var events = new List<EventData>();
+            var results = new List<FunctionResult>();
             for (int i = 0; i < 10; i++)
             {
                 events.Add(new EventData(new byte[0]));
@@ -183,7 +183,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
             // ctor is private
             constructor = typeof(LeaseLostException)
                 .GetConstructor(BindingFlags.NonPublic | BindingFlags.Instance, null, new Type[] { typeof(string), typeof(Exception) }, null);
-            LeaseLostException leaseLostEx = (LeaseLostException)constructor.Invoke(new object[] { "My LeaseLostException!", new Exception() });
+            var leaseLostEx = (LeaseLostException)constructor.Invoke(new object[] { "My LeaseLostException!", new Exception() });
 
             await eventProcessor.ProcessErrorAsync(partitionContext, leaseLostEx);
             msg = testLogger.GetLogMessages().Single();

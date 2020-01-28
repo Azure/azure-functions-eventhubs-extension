@@ -32,11 +32,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs
         /// <param name="client"></param>
         public EventHubAsyncCollector(EventHubClient client)
         {
-            if (client == null)
-            {
-                throw new ArgumentNullException("client");
-            }
-            _client = client;
+            _client = client ?? throw new ArgumentNullException(nameof(client));
         }
 
         /// <summary>
@@ -49,7 +45,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs
         {
             if (item == null)
             {
-                throw new ArgumentNullException("item");
+                throw new ArgumentNullException(nameof(item));
             }
 
             string key = item.SystemProperties?.PartitionKey ?? string.Empty;
@@ -124,7 +120,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs
             {
                 if (item == null)
                 {
-                    throw new ArgumentNullException("item");
+                    throw new ArgumentNullException(nameof(item));
                 }
 
                 while (true)

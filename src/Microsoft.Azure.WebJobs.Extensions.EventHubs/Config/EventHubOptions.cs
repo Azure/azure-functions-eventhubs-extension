@@ -45,10 +45,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs
         /// </summary>
         public int BatchCheckpointFrequency
         {
-            get
-            {
-                return _batchCheckpointFrequency;
-            }
+            get => _batchCheckpointFrequency;
 
             set
             {
@@ -56,6 +53,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs
                 {
                     throw new InvalidOperationException("Batch checkpoint frequency must be larger than 0.");
                 }
+
                 _batchCheckpointFrequency = value;
             }
         }
@@ -72,10 +70,10 @@ namespace Microsoft.Azure.WebJobs.EventHubs
         {
             if (client == null)
             {
-                throw new ArgumentNullException("client");
+                throw new ArgumentNullException(nameof(client));
             }
-            string eventHubName = client.EventHubName;
-            AddEventHubClient(eventHubName, client);
+
+            AddEventHubClient(client.EventHubName, client);
         }
 
         /// <summary>
@@ -85,16 +83,12 @@ namespace Microsoft.Azure.WebJobs.EventHubs
         /// <param name="client"></param>
         public void AddEventHubClient(string eventHubName, EventHubClient client)
         {
-            if (eventHubName == null)
+            if (string.IsNullOrWhiteSpace(eventHubName))
             {
-                throw new ArgumentNullException("eventHubName");
-            }
-            if (client == null)
-            {
-                throw new ArgumentNullException("client");
+                throw new ArgumentNullException(nameof(eventHubName));
             }
 
-            _clients[eventHubName] = client;
+            _clients[eventHubName] = client ?? throw new ArgumentNullException(nameof(client));
         }
 
         /// <summary>
@@ -104,13 +98,13 @@ namespace Microsoft.Azure.WebJobs.EventHubs
         /// <param name="sendConnectionString">connection string for sending messages. If this includes an EntityPath, it takes precedence over the eventHubName parameter.</param>
         public void AddSender(string eventHubName, string sendConnectionString)
         {
-            if (eventHubName == null)
+            if (string.IsNullOrWhiteSpace(eventHubName))
             {
-                throw new ArgumentNullException("eventHubName");
+                throw new ArgumentNullException(nameof(eventHubName));
             }
-            if (sendConnectionString == null)
+            if (string.IsNullOrWhiteSpace(sendConnectionString))
             {
-                throw new ArgumentNullException("sendConnectionString");
+                throw new ArgumentNullException(nameof(sendConnectionString));
             }
 
             EventHubsConnectionStringBuilder sb = new EventHubsConnectionStringBuilder(sendConnectionString);
@@ -119,8 +113,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs
                 sb.EntityPath = eventHubName;
             }
 
-            var client = EventHubClient.CreateFromConnectionString(sb.ToString());
-            AddEventHubClient(eventHubName, client);
+            AddEventHubClient(eventHubName, EventHubClient.CreateFromConnectionString(sb.ToString()));
         }
 
         /// <summary>
@@ -135,16 +128,12 @@ namespace Microsoft.Azure.WebJobs.EventHubs
         /// </remarks>
         public void AddEventProcessorHost(string eventHubName, EventProcessorHost listener)
         {
-            if (eventHubName == null)
+            if (string.IsNullOrWhiteSpace(eventHubName))
             {
-                throw new ArgumentNullException("eventHubName");
-            }
-            if (listener == null)
-            {
-                throw new ArgumentNullException("listener");
+                throw new ArgumentNullException(nameof(eventHubName));
             }
 
-            _explicitlyProvidedHosts[eventHubName] = listener;
+            _explicitlyProvidedHosts[eventHubName] = listener ?? throw new ArgumentNullException(nameof(listener));
         }
 
         /// <summary>
@@ -154,11 +143,11 @@ namespace Microsoft.Azure.WebJobs.EventHubs
         /// <param name="receiverConnectionString">connection string for receiving messages. This can encapsulate other service bus properties like the namespace and endpoints.</param>
         public void AddReceiver(string eventHubName, string receiverConnectionString)
         {
-            if (eventHubName == null)
+            if (string.IsNullOrWhiteSpace(eventHubName))
             {
                 throw new ArgumentNullException("eventHubName");
             }
-            if (receiverConnectionString == null)
+            if (string.IsNullOrWhiteSpace(receiverConnectionString))
             {
                 throw new ArgumentNullException("receiverConnectionString");
             }
@@ -177,17 +166,17 @@ namespace Microsoft.Azure.WebJobs.EventHubs
         /// <param name="storageConnectionString">storage connection string that the EventProcessorHost client will use to coordinate multiple listener instances. </param>
         public void AddReceiver(string eventHubName, string receiverConnectionString, string storageConnectionString)
         {
-            if (eventHubName == null)
+            if (string.IsNullOrWhiteSpace(eventHubName))
             {
-                throw new ArgumentNullException("eventHubName");
+                throw new ArgumentNullException(nameof(eventHubName));
             }
-            if (receiverConnectionString == null)
+            if (string.IsNullOrWhiteSpace(receiverConnectionString))
             {
-                throw new ArgumentNullException("receiverConnectionString");
+                throw new ArgumentNullException(nameof(receiverConnectionString));
             }
-            if (storageConnectionString == null)
+            if (string.IsNullOrWhiteSpace(storageConnectionString))
             {
-                throw new ArgumentNullException("storageConnectionString");
+                throw new ArgumentNullException(nameof(storageConnectionString));
             }
 
             this._receiverCreds[eventHubName] = new ReceiverCreds
@@ -199,7 +188,6 @@ namespace Microsoft.Azure.WebJobs.EventHubs
 
         internal EventHubClient GetEventHubClient(string eventHubName, string connection)
         {
-            EventHubClient client;
 
             if (string.IsNullOrEmpty(eventHubName))
             {
@@ -207,7 +195,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs
                 eventHubName = builder.EntityPath;
             }
 
-            if (_clients.TryGetValue(eventHubName, out client))
+            if (_clients.TryGetValue(eventHubName, out EventHubClient client))
             {
                 return client;
             }
@@ -219,33 +207,37 @@ namespace Microsoft.Azure.WebJobs.EventHubs
                     return _clients[key];
                 });
             }
+
             throw new InvalidOperationException("No event hub sender named " + eventHubName);
         }
 
         // Lookup a listener for receiving events given the name provided in the [EventHubTrigger] attribute. 
         internal EventProcessorHost GetEventProcessorHost(IConfiguration config, string eventHubName, string consumerGroup)
         {
-            ReceiverCreds creds;
-            if (this._receiverCreds.TryGetValue(eventHubName, out creds))
+            if (this._receiverCreds.TryGetValue(eventHubName, out ReceiverCreds creds))
             {
                 // Common case. Create a new EventProcessorHost instance to listen. 
                 string eventProcessorHostName = Guid.NewGuid().ToString();
 
-                if (consumerGroup == null)
+                if (string.IsNullOrWhiteSpace(consumerGroup))
                 {
                     consumerGroup = PartitionReceiver.DefaultConsumerGroupName;
                 }
+
                 var storageConnectionString = creds.StorageConnectionString;
-                if (storageConnectionString == null)
+                if (string.IsNullOrWhiteSpace(storageConnectionString))
                 {
-                    string defaultStorageString = config.GetWebJobsConnectionString(ConnectionStringNames.Storage);
-                    storageConnectionString = defaultStorageString;
+                    storageConnectionString = config.GetWebJobsConnectionString(ConnectionStringNames.Storage);
+                    if (string.IsNullOrWhiteSpace(storageConnectionString))
+                    {
+                        throw new ArgumentNullException(nameof(storageConnectionString));
+                    }
                 }
 
                 // If the connection string provides a hub name, that takes precedence. 
                 // Note that connection strings *can't* specify a consumerGroup, so must always be passed in. 
                 string actualPath = eventHubName;
-                EventHubsConnectionStringBuilder sb = new EventHubsConnectionStringBuilder(creds.EventHubConnectionString);
+                var sb = new EventHubsConnectionStringBuilder(creds.EventHubConnectionString);
                 if (sb.EntityPath != null)
                 {
                     actualPath = sb.EntityPath;
@@ -256,24 +248,24 @@ namespace Microsoft.Azure.WebJobs.EventHubs
                 var blobPrefix = GetBlobPrefix(actualPath, @namespace);
 
                 // Use blob prefix support available in EPH starting in 2.2.6 
-                EventProcessorHost host = new EventProcessorHost(
+                var host = new EventProcessorHost(
                     hostName: eventProcessorHostName,
                     eventHubPath: actualPath,
                     consumerGroupName: consumerGroup,
                     eventHubConnectionString: sb.ToString(),
                     storageConnectionString: storageConnectionString,
                     leaseContainerName: LeaseContainerName,
-                    storageBlobPrefix: blobPrefix);
-
-                host.PartitionManagerOptions = PartitionManagerOptions;
+                    storageBlobPrefix: blobPrefix)
+                {
+                    PartitionManagerOptions = PartitionManagerOptions
+                };
 
                 return host;
             }
             else
             {
                 // Rare case: a power-user caller specifically provided an event processor host to use. 
-                EventProcessorHost host;
-                if (_explicitlyProvidedHosts.TryGetValue(eventHubName, out host))
+                if (_explicitlyProvidedHosts.TryGetValue(eventHubName, out EventProcessorHost host))
                 {
                     return host;
                 }
@@ -294,14 +286,14 @@ namespace Microsoft.Azure.WebJobs.EventHubs
             }
         }
 
-        // Escape a blob path.  
-        // For diagnostics, we want human-readble strings that resemble the input. 
-        // Inputs are most commonly alphanumeric with a fex extra chars (dash, underscore, dot). 
-        // Escape character is a ':', which is also escaped. 
-        // Blob names are case sensitive; whereas input is case insensitive, so normalize to lower.  
+        // Escape a blob path.
+        // For diagnostics, we want human-readble strings that resemble the input.
+        // Inputs are most commonly alphanumeric with a fex extra chars (dash, underscore, dot).
+        // Escape character is a ':', which is also escaped.
+        // Blob names are case sensitive; whereas input is case insensitive, so normalize to lower.
         private static string EscapeBlobPath(string path)
         {
-            StringBuilder sb = new StringBuilder(path.Length);
+            var sb = new StringBuilder(path.Length);
             foreach (char c in path)
             {
                 if (c >= 'a' && c <= 'z')
@@ -330,13 +322,9 @@ namespace Microsoft.Azure.WebJobs.EventHubs
             return sb.ToString();
         }
 
-        internal static string GetEventHubNamespace(EventHubsConnectionStringBuilder connectionString)
-        {
-            // EventHubs only have 1 endpoint. 
-            var url = connectionString.Endpoint;
-            var @namespace = url.Host;
-            return @namespace;
-        }
+        internal static string GetEventHubNamespace(EventHubsConnectionStringBuilder connectionString) =>
+            // EventHubs only have 1 endpoint.
+            connectionString.Endpoint.Host;
 
         /// <summary>
         /// Get the blob prefix used with EventProcessorHost for a given event hub.  
@@ -349,20 +337,19 @@ namespace Microsoft.Azure.WebJobs.EventHubs
         /// This must be an injective one-to-one function because:
         /// 1. multiple machines listening on the same event hub must use the same blob prefix. This means it must be deterministic. 
         /// 2. different event hubs must not resolve to the same path. 
-        /// </remarks>        
+        /// </remarks>
         public static string GetBlobPrefix(string eventHubName, string serviceBusNamespace)
         {
-            if (eventHubName == null)
+            if (string.IsNullOrWhiteSpace(eventHubName))
             {
-                throw new ArgumentNullException("eventHubName");
+                throw new ArgumentNullException(nameof(eventHubName));
             }
-            if (serviceBusNamespace == null)
+            if (string.IsNullOrWhiteSpace(serviceBusNamespace))
             {
-                throw new ArgumentNullException("serviceBusNamespace");
+                throw new ArgumentNullException(nameof(serviceBusNamespace));
             }
 
-            string key = EscapeBlobPath(serviceBusNamespace) + "/" + EscapeBlobPath(eventHubName) + "/";
-            return key;
+            return EscapeBlobPath(serviceBusNamespace) + "/" + EscapeBlobPath(eventHubName) + "/";
         }
 
         public string Format()
@@ -404,7 +391,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs
         // Multiple consumer groups (and multiple listeners) on the same hub can share the same credentials. 
         private class ReceiverCreds
         {
-            // Required.  
+            // Required.
             public string EventHubConnectionString { get; set; }
 
             // Optional. If not found, use the stroage from JobHostConfiguration

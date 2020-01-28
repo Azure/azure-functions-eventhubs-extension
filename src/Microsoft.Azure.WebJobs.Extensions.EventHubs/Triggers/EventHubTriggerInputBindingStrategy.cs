@@ -18,7 +18,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs
         public EventHubTriggerInput ConvertFromString(string input)
         {
             byte[] bytes = Encoding.UTF8.GetBytes(input);
-            EventData eventData = new EventData(bytes);
+            var eventData = new EventData(bytes);
 
             // Return a single event. Doesn't support multiple dispatch 
             return EventHubTriggerInput.New(eventData);            
@@ -38,15 +38,18 @@ namespace Microsoft.Azure.WebJobs.EventHubs
         {
             if (value == null)
             {
-                throw new ArgumentNullException("value");
+                throw new ArgumentNullException(nameof(value));
             }
+
             return value.Events;
         }
 
         public Dictionary<string, Type> GetBindingContract(bool isSingleDispatch = true)
         {
-            var contract = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase);
-            contract.Add("PartitionContext", typeof(PartitionContext));
+            var contract = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase)
+            {
+                { "PartitionContext", typeof(PartitionContext) }
+            };
 
             AddBindingContractMember(contract, "PartitionKey", typeof(string), isSingleDispatch);
             AddBindingContractMember(contract, "Offset", typeof(string), isSingleDispatch);
@@ -71,7 +74,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs
         {
             if (value == null)
             {
-                throw new ArgumentNullException("value");
+                throw new ArgumentNullException(nameof(value));
             }
 
             var bindingData = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);

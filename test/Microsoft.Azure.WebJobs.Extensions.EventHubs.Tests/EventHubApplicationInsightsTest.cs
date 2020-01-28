@@ -15,7 +15,6 @@ using Microsoft.ApplicationInsights.DataContracts;
 using Microsoft.ApplicationInsights.Extensibility;
 using Microsoft.ApplicationInsights.Extensibility.Implementation;
 using Microsoft.Azure.EventHubs;
-using Microsoft.Azure.EventHubs.Processor;
 using Microsoft.Azure.WebJobs.EventHubs;
 using Microsoft.Azure.WebJobs.EventHubs.UnitTests;
 using Microsoft.Azure.WebJobs.Host.Executors;
@@ -98,21 +97,21 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             var ehTriggerRequest = requests.Single(r => r.Context.Operation.Name == "ProcessSingleEvent" && r.Context.Operation.Id == operationId);
 
             ValidateEventHubDependency(
-                ehOutDependency,
-                _endpoint, 
-                TestHubName, 
-                "Send",
-                "SendEvent_TestHub", 
-                operationId, 
-                manualCallRequest.Id,
-                LogCategories.Bindings);
+                dependency: ehOutDependency,
+                endpoint: _endpoint,
+                entityName: TestHubName,
+                name: "Send",
+                operationName: "SendEvent_TestHub",
+                operationId: operationId,
+                parentId: manualCallRequest.Id,
+                category: LogCategories.Bindings);
 
             ValidateEventHubRequest(
-                ehTriggerRequest,
-                true,
-                "ProcessSingleEvent",
-                operationId,
-                ehOutDependency.Id);
+                request: ehTriggerRequest,
+                success: true,
+                operationName: "ProcessSingleEvent",
+                operationId: operationId,
+                parentId: ehOutDependency.Id);
 
             Assert.False(ehTriggerRequest.Properties.ContainsKey("_MS.links"));
         }
@@ -144,14 +143,14 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             var manualOperationId = manualCallRequest.Context.Operation.Id;
 
             ValidateEventHubDependency(
-                ehOutDependency,
-                _endpoint,
-                TestHubName,
-                "Send",
-                "SendEvents_TestHub",
-                manualOperationId,
-                manualCallRequest.Id,
-                LogCategories.Bindings);
+                dependency: ehOutDependency,
+                endpoint: _endpoint,
+                entityName: TestHubName,
+                name: "Send",
+                operationName: "SendEvents_TestHub",
+                operationId: manualOperationId,
+                parentId: manualCallRequest.Id,
+                category: LogCategories.Bindings);
 
             var ehTriggerRequests = requests.Where(r => r.Context.Operation.Name == "ProcessMultipleEvents").ToList();
             List<TestLink> allLinks = new List<TestLink>();
@@ -162,11 +161,11 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 if (ehTriggerRequest.Properties.TryGetValue("_MS.links", out var linksStr))
                 {
                     ValidateEventHubRequest(
-                        ehTriggerRequest,
-                        true,
-                        "ProcessMultipleEvents",
-                        null,
-                        null);
+                        request: ehTriggerRequest,
+                        success: true,
+                        operationName: "ProcessMultipleEvents",
+                        operationId: null,
+                        parentId: null);
 
                     Assert.NotNull(ehTriggerRequest.Context.Operation.Id);
                     Assert.Null(ehTriggerRequest.Context.Operation.ParentId);
@@ -183,11 +182,11 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 else
                 {
                     ValidateEventHubRequest(
-                        ehTriggerRequest,
-                        true,
-                        "ProcessMultipleEvents",
-                        manualOperationId,
-                        ehOutDependency.Id);
+                        request: ehTriggerRequest,
+                        success: true,
+                        operationName: "ProcessMultipleEvents",
+                        operationId: manualOperationId,
+                        parentId: ehOutDependency.Id);
                 }
             }
 
@@ -241,11 +240,11 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             foreach (var ehTriggerRequest in ehTriggerRequests)
             {
                 ValidateEventHubRequest(
-                    ehTriggerRequest,
-                    true,
-                    "ProcessMultipleEvents",
-                    null,
-                    null);
+                    request: ehTriggerRequest,
+                    success: true,
+                    operationName: "ProcessMultipleEvents",
+                    operationId: null,
+                    parentId: null);
 
                 Assert.NotNull(ehTriggerRequest.Context.Operation.Id);
                 Assert.Null(ehTriggerRequest.Context.Operation.ParentId);
@@ -346,23 +345,23 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             Assert.True(double.TryParse(request.Properties[LogConstants.FunctionExecutionTimeKey], out double functionDuration));
             Assert.True(request.Duration.TotalMilliseconds >= functionDuration);
 
-            Assert.Equal(LogCategories.Results, request.Properties[LogConstants.CategoryNameKey]);
-            Assert.Equal((success ? LogLevel.Information : LogLevel.Error).ToString(), request.Properties[LogConstants.LogLevelKey]);
+            Assert.Equal(expected: LogCategories.Results, actual: request.Properties[LogConstants.CategoryNameKey]);
+            Assert.Equal(expected: (success ? LogLevel.Information : LogLevel.Error).ToString(), actual: request.Properties[LogConstants.LogLevelKey]);
             Assert.NotNull(request.Name);
             Assert.NotNull(request.Id);
 
             if (operationId != null)
             {
-                Assert.Equal(operationId, request.Context.Operation.Id);
+                Assert.Equal(expected: operationId, actual: request.Context.Operation.Id);
             }
 
             if (parentId != null)
             {
-                Assert.Equal(parentId, request.Context.Operation.ParentId);
+                Assert.Equal(expected: parentId, actual: request.Context.Operation.ParentId);
             }
 
-            Assert.Equal(operationName, request.Context.Operation.Name);
-            Assert.Equal(operationName, request.Name);
+            Assert.Equal(expected: operationName, actual: request.Context.Operation.Name);
+            Assert.Equal(expected: operationName, actual: request.Name);
 
             Assert.True(request.Properties.ContainsKey(LogConstants.InvocationIdKey));
 
