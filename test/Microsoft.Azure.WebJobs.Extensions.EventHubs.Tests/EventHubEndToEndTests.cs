@@ -13,6 +13,7 @@ using Microsoft.Azure.WebJobs.Host.TestCommon;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Newtonsoft.Json.Linq;
 using Xunit;
 
 namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
@@ -30,6 +31,44 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             _results = new List<string>();
             _testId = Guid.NewGuid().ToString();
             _eventWait = new ManualResetEvent(initialState: false);
+        }
+
+        [Fact]
+        public async Task EventHub_PocoBinding()
+        {
+            var tuple = BuildHost<EventHubTestSingleDispatchJobs>();
+            using (var host = tuple.Item1)
+            {
+                var method = typeof(EventHubTestSingleDispatchJobs).GetMethod(nameof(EventHubTestSingleDispatchJobs.BindToPoco), BindingFlags.Static | BindingFlags.Public);
+                var id = Guid.NewGuid().ToString();
+                await host.CallAsync(method, new { input = "{ Name: 'foo', Value: 'bar' }" });
+
+                bool result = _eventWait.WaitOne(Timeout);
+                Assert.True(result);
+
+                var logs = tuple.Item2.GetTestLoggerProvider().GetAllLogMessages().Select(p => p.FormattedMessage);
+
+                Assert.Contains("PocoValues(foo,bar)", logs);
+            }
+        }
+
+        [Fact]
+        public async Task EventHub_StringBinding()
+        {
+            var tuple = BuildHost<EventHubTestSingleDispatchJobs>();
+            using (var host = tuple.Item1)
+            {
+                var method = typeof(EventHubTestSingleDispatchJobs).GetMethod(nameof(EventHubTestSingleDispatchJobs.BindToString), BindingFlags.Static | BindingFlags.Public);
+                var id = Guid.NewGuid().ToString();
+                await host.CallAsync(method, new { input = "foobar" });
+
+                bool result = _eventWait.WaitOne(Timeout);
+                Assert.True(result);
+
+                var logs = tuple.Item2.GetTestLoggerProvider().GetAllLogMessages().Select(p => p.FormattedMessage);
+
+                Assert.Contains("Input(foobar)", logs);
+            }
         }
 
         [Fact]
@@ -114,6 +153,20 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 
         public class EventHubTestSingleDispatchJobs
         {
+            public static void BindToPoco([EventHubTrigger(TestHubName)] TestPoco input, string value, string name, ILogger logger)
+            {
+                Assert.Equal(input.Value, value);
+                Assert.Equal(input.Name, name);
+                logger.LogInformation($"PocoValues({name},{value})");
+                _eventWait.Set();
+            }
+
+            public static void BindToString([EventHubTrigger(TestHubName)] string input, ILogger logger)
+            {
+                logger.LogInformation($"Input({input})");
+                _eventWait.Set();
+            }
+
             public static void SendEvent_TestHub(string input, [EventHub(TestHubName)] out EventData evt)
             {
                 evt = new EventData(Encoding.UTF8.GetBytes(input));
@@ -250,6 +303,11 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             jobHost.StartAsync().GetAwaiter().GetResult();
 
             return new Tuple<JobHost, IHost>(jobHost, host);
+        }
+        public class TestPoco
+        {
+            public string Name { get; set; }
+            public string Value { get; set; }
         }
     }
 }
