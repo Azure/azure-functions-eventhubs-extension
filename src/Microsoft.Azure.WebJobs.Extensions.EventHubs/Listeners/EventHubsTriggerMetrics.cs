@@ -2,9 +2,6 @@
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
 using Microsoft.Azure.WebJobs.Host.Scale;
-using System;
-using System.Collections.Generic;
-using System.Text;
 
 namespace Microsoft.Azure.WebJobs.EventHubs.Listeners
 {

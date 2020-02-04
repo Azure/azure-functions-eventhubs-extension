@@ -177,7 +177,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
         [InlineData("path2", "Endpoint=sb://test89123-ns-x.servicebus.windows.net/;SharedAccessKeyName=ReceiveRule;SharedAccessKey=secretkey;EntityPath=path2")]
         public void EntityPathInConnectionString(string expectedPathName, string connectionString)
         {
-            EventHubOptions options = new EventHubOptions();
+            var options = new EventHubOptions();
 
             // Test sender
             options.AddSender("k1", connectionString);
@@ -191,7 +191,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
         [InlineData("path2", "Endpoint=sb://test89123-ns-x.servicebus.windows.net/;SharedAccessKeyName=ReceiveRule;SharedAccessKey=secretkey;EntityPath=path2")]
         public void GetEventHubClient_AddsConnection(string expectedPathName, string connectionString)
         {
-            EventHubOptions options = new EventHubOptions();
+            var options = new EventHubOptions();
             var client = options.GetEventHubClient("k1", connectionString);
             Assert.Equal(expectedPathName, client.EventHubName);
         }
@@ -214,8 +214,10 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
         [InlineData(200)]
         public void EventHubBatchCheckpointFrequency(int num)
         {
-            var options = new EventHubOptions();
-            options.BatchCheckpointFrequency = num;
+            var options = new EventHubOptions
+            {
+                BatchCheckpointFrequency = num
+            };
             Assert.Equal(num, options.BatchCheckpointFrequency);
         }
 

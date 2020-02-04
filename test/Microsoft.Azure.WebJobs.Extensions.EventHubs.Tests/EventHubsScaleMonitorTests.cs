@@ -5,7 +5,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
-using System.Text;
 using System.Threading.Tasks;
 using Microsoft.Azure.EventHubs;
 using Microsoft.Azure.WebJobs.EventHubs.Listeners;
@@ -62,7 +61,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
         [Fact]
         public async void CreateTriggerMetrics_ReturnsExpectedResult()
         {
-            EventHubsConnectionStringBuilder sb = new EventHubsConnectionStringBuilder(_eventHubConnectionString);
+            var sb = new EventHubsConnectionStringBuilder(_eventHubConnectionString);
             string prefix = $"{sb.Endpoint.Host}/{_eventHubName.ToLower()}/{_consumerGroup}/0";
 
             var mockBlobReference = new Mock<CloudBlockBlob>(MockBehavior.Strict, new Uri(_storageUri, $"{_eventHubContainerName}/{prefix}"));
@@ -134,7 +133,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
         [Fact]
         public async void CreateTriggerMetrics_MultiplePartitions_ReturnsExpectedResult()
         {
-            EventHubsConnectionStringBuilder sb = new EventHubsConnectionStringBuilder(_eventHubConnectionString);
+            var sb = new EventHubsConnectionStringBuilder(_eventHubConnectionString);
             string prefix = $"{sb.Endpoint.Host}/{_eventHubName.ToLower()}/{_consumerGroup}/";
 
             var mockBlobReference = new Mock<CloudBlockBlob>(MockBehavior.Strict, new Uri(_storageUri, $"{_eventHubContainerName}/{prefix}"));

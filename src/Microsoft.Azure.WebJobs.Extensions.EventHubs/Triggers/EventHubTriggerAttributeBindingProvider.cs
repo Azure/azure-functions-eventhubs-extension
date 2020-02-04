@@ -43,7 +43,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs
         {
             if (context == null)
             {
-                throw new ArgumentNullException("context");
+                throw new ArgumentNullException(nameof(context));
             }
 
             ParameterInfo parameter = context.Parameter;
@@ -75,16 +75,16 @@ namespace Microsoft.Azure.WebJobs.EventHubs
              (factoryContext, singleDispatch) =>
              {
                  IListener listener = new EventHubListener(
-                                                factoryContext.Descriptor.Id,
-                                                resolvedEventHubName,
-                                                resolvedConsumerGroup,
-                                                connectionString,
-                                                storageConnectionString,
-                                                factoryContext.Executor,
-                                                eventHostListener,
-                                                singleDispatch,
-                                                _options.Value,
-                                                _logger);
+                                                functionId: factoryContext.Descriptor.Id,
+                                                eventHubName: resolvedEventHubName,
+                                                consumerGroup: resolvedConsumerGroup,
+                                                connectionString: connectionString,
+                                                storageConnectionString: storageConnectionString,
+                                                executor: factoryContext.Executor,
+                                                eventProcessorHost: eventHostListener,
+                                                singleDispatch: singleDispatch,
+                                                options: _options.Value,
+                                                logger: _logger);
                  return Task.FromResult(listener);
              };
 

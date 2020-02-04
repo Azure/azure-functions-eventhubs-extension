@@ -56,13 +56,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.Listeners
             _client = new Lazy<EventHubClient>(() => EventHubClient.CreateFromConnectionString(ConnectionStringBuilder.ToString()));
         }
 
-        public ScaleMonitorDescriptor Descriptor
-        {
-            get
-            {
-                return _scaleMonitorDescriptor;
-            }
-        }
+        public ScaleMonitorDescriptor Descriptor => _scaleMonitorDescriptor;
 
         private CloudBlobContainer BlobContainer
         {
@@ -94,14 +88,11 @@ namespace Microsoft.Azure.WebJobs.EventHubs.Listeners
             }
         }
 
-        async Task<ScaleMetrics> IScaleMonitor.GetMetricsAsync()
-        {
-            return await GetMetricsAsync();
-        }
+        async Task<ScaleMetrics> IScaleMonitor.GetMetricsAsync() => await GetMetricsAsync();
 
         public async Task<EventHubsTriggerMetrics> GetMetricsAsync()
         {
-            EventHubsTriggerMetrics metrics = new EventHubsTriggerMetrics();
+            var metrics = new EventHubsTriggerMetrics();
             EventHubRuntimeInformation runtimeInfo = null;
 
             try
@@ -152,7 +143,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.Listeners
             // For each partition, get the last enqueued sequence number.
             // If the last enqueued sequence number does not equal the SequenceNumber from the lease info in storage,
             // accumulate new event counts across partitions to derive total new event counts.
-            List<string> partitionErrors = new List<string>();
+            var partitionErrors = new List<string>();
             for (int i = 0; i < partitionRuntimeInfo.Count; i++)
             {
                 long partitionUnprocessedEventCount = 0;
@@ -287,7 +278,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.Listeners
 
         private ScaleStatus GetScaleStatusCore(int workerCount, EventHubsTriggerMetrics[] metrics)
         {
-            ScaleStatus status = new ScaleStatus
+            var status = new ScaleStatus
             {
                 Vote = ScaleVote.None
             };

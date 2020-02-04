@@ -111,8 +111,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs
                 return LogLevel.Information;
             }
 
-            var ehex = ex as EventHubsException;
-            if (!(ex is OperationCanceledException) && (ehex == null || !ehex.IsTransient))
+            if (!(ex is OperationCanceledException) && (!(ex is EventHubsException ehex) || !ehex.IsTransient))
             {
                 // any non-transient exceptions or unknown exception types
                 // we want to log as errors
