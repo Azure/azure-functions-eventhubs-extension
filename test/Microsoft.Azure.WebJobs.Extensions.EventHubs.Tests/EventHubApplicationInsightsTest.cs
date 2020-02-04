@@ -156,9 +156,10 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             var ehTriggerRequests = requests.Where(r => r.Context.Operation.Name == "ProcessMultipleEvents").ToList();
             List<TestLink> allLinks = new List<TestLink>();
 
+            // EventHub can batch events in a different ways
             foreach (var ehTriggerRequest in ehTriggerRequests)
             {
-                // if there are links
+                // if it batched more than one, we'll have links
                 if (ehTriggerRequest.Properties.TryGetValue("_MS.links", out var linksStr))
                 {
                     ValidateEventHubRequest(
@@ -195,7 +196,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             // as message batching could be done differently (split into single processings and batches)
             // we only check that all links are from relevant messages.
             // current Event Hubs SDK does not generate unique Id per message, so all messages share the same Id
-            Assert.Equal(EventHubTestMultipleDispatchJobs.ProcessedEvents, allLinks.Count);
+            Assert.Equal(EventHubTestMultipleDispatchJobs.LinksCount.Sum(), allLinks.Count);
             Assert.Equal(allLinks.Count, allLinks.Count(l => l.id == ehOutDependency.Id));
         }
 
@@ -440,13 +441,14 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 
         public class EventHubTestMultipleDispatchJobs
         {
-            public static int ProcessedEvents = 0;
+            public static List<int> LinksCount = new List<int>();
             public const int EventCount = 5;
             private static readonly object lck = new object();
-            
+            private static int messagesCount = 0;
             public static void SendEvents_TestHub(string input, [EventHub(TestHubName)] out EventData[] events)
             {
-                ProcessedEvents = 0;
+                LinksCount.Clear();
+                messagesCount = 0;
                 events = new EventData[EventCount];
                 for (int i = 0; i < EventCount; i++)
                 {
@@ -461,12 +463,17 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 Activity.Current.AddTag("receivedMessages", eventsFromCurrentTest.Length.ToString());
                 lock (lck)
                 {
-                    ProcessedEvents += eventsFromCurrentTest.Length;
-                }
-                
-                if (ProcessedEvents >= EventCount)
-                {
-                    _eventWait.Set();
+                    messagesCount += eventsFromCurrentTest.Length;
+
+                    if (eventsFromCurrentTest.Length > 1)
+                    {
+                        LinksCount.Add(eventsFromCurrentTest.Length);
+                    }
+
+                    if (messagesCount >= EventCount)
+                    {
+                        _eventWait.Set();
+                    }
                 }
             }
         }
