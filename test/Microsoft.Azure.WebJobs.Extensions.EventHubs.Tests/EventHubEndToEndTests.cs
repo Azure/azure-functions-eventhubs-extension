@@ -36,38 +36,36 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
         [Fact]
         public async Task EventHub_PocoBinding()
         {
-            var tuple = BuildHost<EventHubTestSingleDispatchJobs>();
+            var tuple = BuildHost<EventHubTestBindToPocoJobs>();
             using (var host = tuple.Item1)
             {
-                var method = typeof(EventHubTestSingleDispatchJobs).GetMethod(nameof(EventHubTestSingleDispatchJobs.BindToPoco), BindingFlags.Static | BindingFlags.Public);
-                var id = Guid.NewGuid().ToString();
-                await host.CallAsync(method, new { input = "{ Name: 'foo', Value: 'bar' }" });
+                var method = typeof(EventHubTestBindToPocoJobs).GetMethod(nameof(EventHubTestBindToPocoJobs.SendEvent_TestHub), BindingFlags.Static | BindingFlags.Public);
+                await host.CallAsync(method, new { input = "{ Name: 'foo', Value: '" + _testId +"' }" });
 
                 bool result = _eventWait.WaitOne(Timeout);
                 Assert.True(result);
 
                 var logs = tuple.Item2.GetTestLoggerProvider().GetAllLogMessages().Select(p => p.FormattedMessage);
 
-                Assert.Contains("PocoValues(foo,bar)", logs);
+                Assert.Contains($"PocoValues(foo,{_testId})", logs);
             }
         }
 
         [Fact]
         public async Task EventHub_StringBinding()
         {
-            var tuple = BuildHost<EventHubTestSingleDispatchJobs>();
+            var tuple = BuildHost<EventHubTestBindToStringJobs>();
             using (var host = tuple.Item1)
             {
-                var method = typeof(EventHubTestSingleDispatchJobs).GetMethod(nameof(EventHubTestSingleDispatchJobs.BindToString), BindingFlags.Static | BindingFlags.Public);
-                var id = Guid.NewGuid().ToString();
-                await host.CallAsync(method, new { input = "foobar" });
+                var method = typeof(EventHubTestBindToStringJobs).GetMethod(nameof(EventHubTestBindToStringJobs.SendEvent_TestHub), BindingFlags.Static | BindingFlags.Public);
+                await host.CallAsync(method, new { input = _testId });
 
                 bool result = _eventWait.WaitOne(Timeout);
                 Assert.True(result);
 
                 var logs = tuple.Item2.GetTestLoggerProvider().GetAllLogMessages().Select(p => p.FormattedMessage);
 
-                Assert.Contains("Input(foobar)", logs);
+                Assert.Contains($"Input({_testId})", logs);
             }
         }
 
@@ -77,8 +75,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             Tuple<JobHost, IHost> tuple = BuildHost<EventHubTestSingleDispatchJobs>();
             using (var host = tuple.Item1)
             {
-                var method = typeof(EventHubTestSingleDispatchJobs).GetMethod("SendEvent_TestHub", BindingFlags.Static | BindingFlags.Public);
-                var id = Guid.NewGuid().ToString();
+                var method = typeof(EventHubTestSingleDispatchJobs).GetMethod(nameof(EventHubTestSingleDispatchJobs.SendEvent_TestHub), BindingFlags.Static | BindingFlags.Public);
                 await host.CallAsync(method, new { input = _testId });
 
                 bool result = _eventWait.WaitOne(Timeout);
@@ -151,22 +148,9 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             }
         }
 
+
         public class EventHubTestSingleDispatchJobs
         {
-            public static void BindToPoco([EventHubTrigger(TestHubName)] TestPoco input, string value, string name, ILogger logger)
-            {
-                Assert.Equal(input.Value, value);
-                Assert.Equal(input.Name, name);
-                logger.LogInformation($"PocoValues({name},{value})");
-                _eventWait.Set();
-            }
-
-            public static void BindToString([EventHubTrigger(TestHubName)] string input, ILogger logger)
-            {
-                logger.LogInformation($"Input({input})");
-                _eventWait.Set();
-            }
-
             public static void SendEvent_TestHub(string input, [EventHub(TestHubName)] out EventData evt)
             {
                 evt = new EventData(Encoding.UTF8.GetBytes(input));
@@ -186,6 +170,42 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                     Assert.Equal("value1", properties["TestProp1"]);
                     Assert.Equal("value2", properties["TestProp2"]);
 
+                    _eventWait.Set();
+                }
+            }
+        }
+
+        public class EventHubTestBindToPocoJobs
+        {
+            public static void SendEvent_TestHub(string input, [EventHub(TestHubName)] out EventData evt)
+            {
+                evt = new EventData(Encoding.UTF8.GetBytes(input));
+            }
+
+            public static void BindToPoco([EventHubTrigger(TestHubName)] TestPoco input, string value, string name, ILogger logger)
+            {
+                if (value == _testId)
+                {
+                    Assert.Equal(input.Value, value);
+                    Assert.Equal(input.Name, name);
+                    logger.LogInformation($"PocoValues({name},{value})");
+                    _eventWait.Set();
+                }
+            }
+        }
+
+        public class EventHubTestBindToStringJobs
+        {
+            public static void SendEvent_TestHub(string input, [EventHub(TestHubName)] out EventData evt)
+            {
+                evt = new EventData(Encoding.UTF8.GetBytes(input));
+            }
+
+            public static void BindToString([EventHubTrigger(TestHubName)] string input, ILogger logger)
+            {
+                if (input == _testId)
+                {
+                    logger.LogInformation($"Input({input})");
                     _eventWait.Set();
                 }
             }
