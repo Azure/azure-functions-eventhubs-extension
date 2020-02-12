@@ -14,6 +14,7 @@ using Microsoft.Azure.WebJobs.EventHubs.Listeners;
 using Microsoft.Azure.WebJobs.Host.Executors;
 using Microsoft.Azure.WebJobs.Host.Listeners;
 using Microsoft.Azure.WebJobs.Host.Scale;
+using Microsoft.Azure.WebJobs.Logging;
 using Microsoft.Extensions.Logging;
 using Microsoft.WindowsAzure.Storage.Blob;
 using Newtonsoft.Json;
@@ -116,6 +117,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs
             private readonly CancellationTokenSource _cts = new CancellationTokenSource();
             private readonly ICheckpointer _checkpointer;
             private readonly int _batchCheckpointFrequency;
+            private readonly EventHubOptions _options;
             private int _batchCounter = 0;
             private bool _disposed = false;
 
@@ -126,6 +128,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs
                 _singleDispatch = singleDispatch;
                 _batchCheckpointFrequency = options.BatchCheckpointFrequency;
                 _logger = logger;
+                _options = options;
             }
 
             public Task CloseAsync(PartitionContext context, CloseReason reason)
@@ -188,7 +191,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs
                         input = new TriggeredFunctionData
                         {
                             TriggerValue = eventHubTriggerInput,
-                            TriggerDetails = eventHubTriggerInput.GetTriggerDetails(context)
+                            TriggerDetails = eventHubTriggerInput.GetTriggerDetails(context, this._options.GetEventHubEndpoint(context.EventHubPath))
                         };
 
                         Task task = TryExecuteWithLoggingAsync(input, triggerInput.Events[i]);
@@ -207,7 +210,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs
                     input = new TriggeredFunctionData
                     {
                         TriggerValue = triggerInput,
-                        TriggerDetails = triggerInput.GetTriggerDetails(context)
+                        TriggerDetails = triggerInput.GetTriggerDetails(context, this._options.GetEventHubEndpoint(context.EventHubPath))
                     };
 
                     using (_logger.BeginScope(GetLinksScope(triggerInput.Events)))
@@ -336,6 +339,12 @@ namespace Microsoft.Azure.WebJobs.EventHubs
                 {
                     link = new Activity("Microsoft.Azure.EventHubs.Process");
                     link.SetParentId(diagnosticIdString);
+                    if (message.SystemProperties != null)
+                    {
+                        link.AddTag("EnqueuedTime", ((DateTimeOffset) message.SystemProperties.EnqueuedTimeUtc).ToUnixTimeMilliseconds()
+                            .ToString());
+                    }
+
                     return true;
                 }
 

@@ -252,6 +252,8 @@ namespace Microsoft.Azure.WebJobs.EventHubs
                     sb.EntityPath = null; // need to remove to use with EventProcessorHost
                 }
 
+                creds.EventHubEndpoint = sb.Endpoint.OriginalString;
+
                 var @namespace = GetEventHubNamespace(sb);
                 var blobPrefix = GetBlobPrefix(actualPath, @namespace);
 
@@ -279,6 +281,27 @@ namespace Microsoft.Azure.WebJobs.EventHubs
                 }
             }
             throw new InvalidOperationException("No event hub receiver named " + eventHubName);
+        }
+
+        // Lookup EventHub endpoint given the name provided in the [EventHubTrigger] attribute. 
+        internal string GetEventHubEndpoint(string eventHubName)
+        {
+            if (eventHubName == null)
+            {
+                return null;
+            }
+
+            if (_receiverCreds.TryGetValue(eventHubName, out var creds))
+            {
+                return creds.EventHubEndpoint;
+            }
+
+            if (_explicitlyProvidedHosts.TryGetValue(eventHubName, out var host))
+            {
+                return host.EndpointAddress.OriginalString;
+            }
+
+            return null;
         }
 
         private static string EscapeStorageCharacter(char character)
@@ -407,8 +430,11 @@ namespace Microsoft.Azure.WebJobs.EventHubs
             // Required.  
             public string EventHubConnectionString { get; set; }
 
-            // Optional. If not found, use the stroage from JobHostConfiguration
+            // Optional. If not found, use the storage from JobHostConfiguration
             public string StorageConnectionString { get; set; }
+
+            // Optional. Populated during EventHubConnectionString parsing for monitoring purposes.
+            public string EventHubEndpoint { get; set; }
         }
     }
 }

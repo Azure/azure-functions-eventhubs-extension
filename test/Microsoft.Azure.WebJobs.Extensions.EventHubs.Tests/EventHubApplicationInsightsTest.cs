@@ -15,7 +15,6 @@ using Microsoft.ApplicationInsights.DataContracts;
 using Microsoft.ApplicationInsights.Extensibility;
 using Microsoft.ApplicationInsights.Extensibility.Implementation;
 using Microsoft.Azure.EventHubs;
-using Microsoft.Azure.EventHubs.Processor;
 using Microsoft.Azure.WebJobs.EventHubs;
 using Microsoft.Azure.WebJobs.EventHubs.UnitTests;
 using Microsoft.Azure.WebJobs.Host.Executors;
@@ -107,12 +106,18 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 manualCallRequest.Id,
                 LogCategories.Bindings);
 
+            int expectedTimeInQueue = (int)(ehTriggerRequest.Timestamp.ToUnixTimeMilliseconds() -
+                                            ((DateTimeOffset)EventHubTestSingleDispatchJobs.EnqueuedTime).ToUnixTimeMilliseconds());
+
             ValidateEventHubRequest(
                 ehTriggerRequest,
                 true,
                 "ProcessSingleEvent",
                 operationId,
-                ehOutDependency.Id);
+                ehOutDependency.Id,
+                _endpoint,
+                TestHubName,
+                expectedTimeInQueue);
 
             Assert.False(ehTriggerRequest.Properties.ContainsKey("_MS.links"));
         }
@@ -162,12 +167,23 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 // if it batched more than one, we'll have links
                 if (ehTriggerRequest.Properties.TryGetValue("_MS.links", out var linksStr))
                 {
+                    int expectedTimeInQueue = 0;
+                    foreach (var timeInQueue in EventHubTestMultipleDispatchJobs.LinksEnqueuedTime)
+                    {
+                        expectedTimeInQueue += (int)(ehTriggerRequest.Timestamp.ToUnixTimeMilliseconds() - ((DateTimeOffset)timeInQueue).ToUnixTimeMilliseconds());
+                    }
+
+                    expectedTimeInQueue /= EventHubTestMultipleDispatchJobs.LinksEnqueuedTime.Count;
+
                     ValidateEventHubRequest(
                         ehTriggerRequest,
                         true,
                         "ProcessMultipleEvents",
                         null,
-                        null);
+                        null,
+                        _endpoint,
+                    TestHubName,
+                        expectedTimeInQueue);
 
                     Assert.NotNull(ehTriggerRequest.Context.Operation.Id);
                     Assert.Null(ehTriggerRequest.Context.Operation.ParentId);
@@ -183,12 +199,17 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 // otherwise it was triggered with single message, there is no link
                 else
                 {
+                    int expectedTimeInQueue = (int)(ehTriggerRequest.Timestamp.ToUnixTimeMilliseconds() -
+                                                    ((DateTimeOffset)EventHubTestMultipleDispatchJobs.LinksEnqueuedTime.First()).ToUnixTimeMilliseconds());
                     ValidateEventHubRequest(
                         ehTriggerRequest,
                         true,
                         "ProcessMultipleEvents",
                         manualOperationId,
-                        ehOutDependency.Id);
+                        ehOutDependency.Id,
+                        _endpoint,
+                        TestHubName,
+                        expectedTimeInQueue);
                 }
             }
 
@@ -197,7 +218,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             // we only check that all links are from relevant messages.
             // current Event Hubs SDK does not generate unique Id per message, so all messages share the same Id
             Assert.Equal(EventHubTestMultipleDispatchJobs.LinksCount.Sum(), allLinks.Count);
-            Assert.Equal(allLinks.Count, allLinks.Count(l => l.id == ehOutDependency.Id));
+            Assert.Equal(allLinks.Count, allLinks.Count(l => l.operation_Id == ehOutDependency.Context.Operation.Id));
         }
 
         [Fact]
@@ -216,7 +237,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 expectedLinks[i] = new TestLink
                 {
                     operation_Id = operationId,
-                    id = $"|{operationId}.{spanId}."
+                    id = spanId
                 };
 
                 messages[i] = new EventData(Encoding.UTF8.GetBytes(_testPrefix + i))
@@ -241,12 +262,23 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             List<TestLink> actualLinks = new List<TestLink>();
             foreach (var ehTriggerRequest in ehTriggerRequests)
             {
+                int expectedTimeInQueue = 0;
+                foreach (var timeInQueue in EventHubTestMultipleDispatchJobs.LinksEnqueuedTime)
+                {
+                    expectedTimeInQueue += (int)(ehTriggerRequest.Timestamp.ToUnixTimeMilliseconds() - ((DateTimeOffset)timeInQueue).ToUnixTimeMilliseconds());
+                }
+
+                expectedTimeInQueue /= EventHubTestMultipleDispatchJobs.LinksEnqueuedTime.Count;
+
                 ValidateEventHubRequest(
                     ehTriggerRequest,
                     true,
                     "ProcessMultipleEvents",
                     null,
-                    null);
+                    null,
+                    _endpoint,
+                    TestHubName,
+                    expectedTimeInQueue);
 
                 Assert.NotNull(ehTriggerRequest.Context.Operation.Id);
                 Assert.Null(ehTriggerRequest.Context.Operation.ParentId);
@@ -267,9 +299,9 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
         [Fact]
         public async Task ProcessEvents_SingleDispatch_SystemProperties()
         {
-            var partitionContext = EventHubTests.GetPartitionContext();
+            var partitionContext = EventHubTests.GetPartitionContext(eventHubPath: TestHubName);
+
             var options = new EventHubOptions { BatchCheckpointFrequency = 1 };
-            
             var checkpointer = new Mock<EventHubListener.ICheckpointer>();
 
             var loggerMock = new Mock<ILogger>();
@@ -300,9 +332,9 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
         [Fact]
         public async Task ProcessEvents_SingleDispatch_SystemPropertiesAndApplicationProperties()
         {
-            var partitionContext = EventHubTests.GetPartitionContext();
-            var options = new EventHubOptions { BatchCheckpointFrequency = 1 };
+            var partitionContext = EventHubTests.GetPartitionContext(eventHubPath: TestHubName);
 
+            var options = new EventHubOptions { BatchCheckpointFrequency = 1 };
             var checkpointer = new Mock<EventHubListener.ICheckpointer>();
 
             var loggerMock = new Mock<ILogger>();
@@ -338,9 +370,11 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             bool success,
             string operationName,
             string operationId,
-            string parentId)
+            string parentId,
+            string endpoint,
+            string entityName,
+            int expectedTimeInQueue)
         {
-            Assert.Empty(request.Source);
             Assert.Null(request.Url);
 
             Assert.True(request.Properties.ContainsKey(LogConstants.FunctionExecutionTimeKey));
@@ -376,6 +410,11 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             Assert.Equal("0", request.ResponseCode);
 
             Assert.DoesNotContain(request.Properties, p => p.Key == LogConstants.SucceededKey);
+
+            Assert.True(request.Metrics.TryGetValue("timeSinceEnqueued", out var timeInQueue));
+            Assert.Equal(expectedTimeInQueue, timeInQueue, 0);
+
+            Assert.Equal($"{endpoint}{entityName}", request.Source);
         }
 
         private void ValidateEventHubDependency(
@@ -425,15 +464,19 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 
         public class EventHubTestSingleDispatchJobs
         {
+            public static DateTime EnqueuedTime;
+
             public static void SendEvent_TestHub(string input, [EventHub(TestHubName)] out EventData evt)
             {
+                EnqueuedTime = default;
                 evt = new EventData(Encoding.UTF8.GetBytes(input));
             }
 
-            public static void ProcessSingleEvent([EventHubTrigger(TestHubName)] string evt)
+            public static void ProcessSingleEvent([EventHubTrigger(TestHubName)] EventData evt)
             {
-                if (evt.StartsWith(_testPrefix))
+                if (Encoding.UTF8.GetString(evt.Body).StartsWith(_testPrefix))
                 {
+                    EnqueuedTime = evt.SystemProperties.EnqueuedTimeUtc;
                     _eventWait.Set();
                 }
             }
@@ -442,12 +485,15 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
         public class EventHubTestMultipleDispatchJobs
         {
             public static List<int> LinksCount = new List<int>();
+            public static List<DateTime> LinksEnqueuedTime = new List<DateTime>();
             public const int EventCount = 5;
             private static readonly object lck = new object();
             private static int messagesCount = 0;
             public static void SendEvents_TestHub(string input, [EventHub(TestHubName)] out EventData[] events)
             {
                 LinksCount.Clear();
+                LinksEnqueuedTime.Clear();
+
                 messagesCount = 0;
                 events = new EventData[EventCount];
                 for (int i = 0; i < EventCount; i++)
@@ -457,12 +503,13 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 }
             }
 
-            public static void ProcessMultipleEvents([EventHubTrigger(TestHubName)] string[] events)
+            public static void ProcessMultipleEvents([EventHubTrigger(TestHubName)] EventData[] events)
             {
-                var eventsFromCurrentTest = events.Where(e => e.StartsWith(_testPrefix)).ToArray();
+                var eventsFromCurrentTest = events.Where(e => Encoding.UTF8.GetString(e.Body).StartsWith(_testPrefix)).ToArray();
                 Activity.Current.AddTag("receivedMessages", eventsFromCurrentTest.Length.ToString());
                 lock (lck)
                 {
+                    LinksEnqueuedTime.AddRange(eventsFromCurrentTest.Select(e => e.SystemProperties.EnqueuedTimeUtc));
                     messagesCount += eventsFromCurrentTest.Length;
 
                     if (eventsFromCurrentTest.Length > 1)

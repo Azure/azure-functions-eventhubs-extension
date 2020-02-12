@@ -146,7 +146,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
             var checkpointer = new Mock<EventHubListener.ICheckpointer>(MockBehavior.Strict);
             var executor = new Mock<ITriggeredFunctionExecutor>(MockBehavior.Strict);
             var testLogger = new TestLogger("Test");
-            var eventProcessor = new EventHubListener.EventProcessor(options, executor.Object, testLogger, true, checkpointer.Object);
+            var eventProcessor = new EventHubListener.EventProcessor(options,  executor.Object, testLogger, true, checkpointer.Object);
 
             var ex = new InvalidOperationException("My InvalidOperationException!");
 

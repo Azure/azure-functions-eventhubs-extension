@@ -54,7 +54,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs
             return this.Events[this._selector];
         }
 
-        public Dictionary<string, string> GetTriggerDetails(PartitionContext context)
+        public Dictionary<string, string> GetTriggerDetails(PartitionContext context, string endpoint)
         {
             if (Events.Length == 0)
             {
@@ -84,7 +84,9 @@ namespace Microsoft.Azure.WebJobs.EventHubs
                 { "Offset", offset },
                 { "EnqueueTimeUtc", enqueueTimeUtc },
                 { "SequenceNumber", sequenceNumber },
-                { "Count", Events.Length.ToString()}
+                { "Count", Events.Length.ToString()},
+                { "Endpoint", endpoint},
+                { "Entity", context.EventHubPath},
             };
         }
     }
