@@ -18,6 +18,10 @@ using Microsoft.Extensions.Logging;
 using Microsoft.WindowsAzure.Storage.Blob;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Polly;
+using Polly.CircuitBreaker;
+using Polly.Retry;
+using Polly.Wrap;
 
 namespace Microsoft.Azure.WebJobs.EventHubs
 {
@@ -165,56 +169,89 @@ namespace Microsoft.Azure.WebJobs.EventHubs
 
             public async Task ProcessEventsAsync(PartitionContext context, IEnumerable<EventData> messages)
             {
-                var triggerInput = new EventHubTriggerInput
+                var maxRetryAttempts = 3;
+                var pauseBetweenFailures = TimeSpan.FromSeconds(2);
+
+                var retryPolicy = Policy
+                    .Handle<Exception>()
+                    .WaitAndRetryAsync(maxRetryAttempts, i => pauseBetweenFailures);                
+
+                var fallbackPolicy = Policy
+                       .Handle<Exception>()
+                       .FallbackAsync( async(cancellationToken) => 
+                       {
+                           // Adding empty fallback to prevent throwing an exception after all retries have been exhausted 
+                           _logger.LogDebug("All retries have been exhausted");
+                           await Task.CompletedTask;
+                       });
+
+                await fallbackPolicy
+                     .WrapAsync(retryPolicy)
+                     .ExecuteAsync(async () =>
                 {
-                    Events = messages.ToArray(),
-                    PartitionContext = context
-                };
-
-                TriggeredFunctionData input = null;
-                if (_singleDispatch)
-                {
-                    // Single dispatch
-                    int eventCount = triggerInput.Events.Length;
-                    List<Task> invocationTasks = new List<Task>();
-                    for (int i = 0; i < eventCount; i++)
+                    var triggerInput = new EventHubTriggerInput
                     {
-                        if (_cts.IsCancellationRequested)
-                        {
-                            break;
-                        }
-
-                        EventHubTriggerInput eventHubTriggerInput = triggerInput.GetSingleEventTriggerInput(i);
-                        input = new TriggeredFunctionData
-                        {
-                            TriggerValue = eventHubTriggerInput,
-                            TriggerDetails = eventHubTriggerInput.GetTriggerDetails(context)
-                        };
-
-                        Task task = TryExecuteWithLoggingAsync(input, triggerInput.Events[i]);
-                        invocationTasks.Add(task);
-                    }
-
-                    // Drain the whole batch before taking more work
-                    if (invocationTasks.Count > 0)
-                    {
-                        await Task.WhenAll(invocationTasks);
-                    }
-                }
-                else
-                {
-                    // Batch dispatch
-                    input = new TriggeredFunctionData
-                    {
-                        TriggerValue = triggerInput,
-                        TriggerDetails = triggerInput.GetTriggerDetails(context)
+                        Events = messages.ToArray(),
+                        PartitionContext = context
                     };
 
-                    using (_logger.BeginScope(GetLinksScope(triggerInput.Events)))
+                    TriggeredFunctionData input = null;
+                    if (_singleDispatch)
                     {
-                        await _executor.TryExecuteAsync(input, _cts.Token);
+                        // Single dispatch
+                        int eventCount = triggerInput.Events.Length;
+                        List<Task<FunctionResult>> invocationTasks = new List<Task<FunctionResult>>();
+                        for (int i = 0; i < eventCount; i++)
+                        {
+                            if (_cts.IsCancellationRequested)
+                            {
+                                break;
+                            }
+
+                            EventHubTriggerInput eventHubTriggerInput = triggerInput.GetSingleEventTriggerInput(i);
+                            input = new TriggeredFunctionData
+                            {
+                                TriggerValue = eventHubTriggerInput,
+                                TriggerDetails = eventHubTriggerInput.GetTriggerDetails(context)
+                            };
+
+                            Task<FunctionResult> task = TryExecuteWithLoggingAsync(input, triggerInput.Events[i]);
+                            invocationTasks.Add(task);
+                        }
+
+                        // Drain the whole batch before taking more work
+                        if (invocationTasks.Count > 0)
+                        {
+                            await Task.WhenAll(invocationTasks);
+                        }
+
+                        foreach (var task in invocationTasks)
+                        {
+                            if (task.Result.Succeeded == false)
+                            {
+                                throw new Exception();
+                            }
+                        }
                     }
-                }
+                    else
+                    {
+                        // Batch dispatch
+                        input = new TriggeredFunctionData
+                        {
+                            TriggerValue = triggerInput,
+                            TriggerDetails = triggerInput.GetTriggerDetails(context)
+                        };
+
+                        using (_logger.BeginScope(GetLinksScope(triggerInput.Events)))
+                        {
+                            var result = await _executor.TryExecuteAsync(input, _cts.Token);
+                            if (result.Succeeded == false)
+                            {
+                                throw new Exception();
+                            }
+                        }
+                    }
+                });
 
                 // Dispose all messages to help with memory pressure. If this is missed, the finalizer thread will still get them.
                 bool hasEvents = false;
@@ -237,11 +274,11 @@ namespace Microsoft.Azure.WebJobs.EventHubs
                 }
             }
 
-            private async Task TryExecuteWithLoggingAsync(TriggeredFunctionData input, EventData message)
+            private async Task<FunctionResult> TryExecuteWithLoggingAsync(TriggeredFunctionData input, EventData message)
             {
                 using (_logger.BeginScope(GetLinksScope(message)))
                 {
-                    await _executor.TryExecuteAsync(input, _cts.Token);
+                    return await _executor.TryExecuteAsync(input, _cts.Token);
                 }
             }
 
