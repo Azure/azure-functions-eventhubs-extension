@@ -20,7 +20,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
         [Fact]
         public void NullArgumentCheck()
         {
-            Assert.Throws<ArgumentNullException>(() => new EventHubAsyncCollector(null));
+            Assert.Throws<ArgumentNullException>(() => new EventHubAsyncCollector(null, null));
         }
 
         public EventData CreateEvent(byte[] body, string partitionKey)
@@ -232,7 +232,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
             private const string FakeConnectionString = "Endpoint=sb://test89123-ns-x.servicebus.windows.net/;SharedAccessKeyName=ReceiveRule;SharedAccessKey=secretkey;EntityPath=path2";
 
             public TestEventHubAsyncCollector()
-                : base(TestClient)
+                : base(TestClient, null)
             {
             }
 
