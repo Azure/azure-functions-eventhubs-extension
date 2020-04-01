@@ -129,7 +129,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs
         private IAsyncCollector<EventData> BuildFromAttribute(EventHubAttribute attribute)
         {
             EventHubClient client = _options.Value.GetEventHubClient(attribute.EventHubName, attribute.Connection);
-            return new EventHubAsyncCollector(client);
+            return new EventHubAsyncCollector(client, _loggerFactory);
         }
 
         private static string ConvertEventData2String(EventData x)

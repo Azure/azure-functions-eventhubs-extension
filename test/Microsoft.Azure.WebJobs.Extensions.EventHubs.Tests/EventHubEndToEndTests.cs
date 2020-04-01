@@ -96,6 +96,9 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 
                 Assert.True(logMessages.Where(x => !string.IsNullOrEmpty(x.FormattedMessage)
                     && x.FormattedMessage.Contains("CheckpointAsync")).Count() > 0);
+
+                Assert.True(logMessages.Where(x => !string.IsNullOrEmpty(x.FormattedMessage)
+                    && x.FormattedMessage.Contains("Sending events to EventHub")).Count() > 0);
             }
         }
 
@@ -129,6 +132,9 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 
                 Assert.True(logMessages.Where(x => !string.IsNullOrEmpty(x.FormattedMessage)
                     && x.FormattedMessage.Contains("CheckpointAsync")).Count() > 0);
+
+                Assert.True(logMessages.Where(x => !string.IsNullOrEmpty(x.FormattedMessage)
+                    && x.FormattedMessage.Contains("Sending events to EventHub")).Count() > 0);
             }
         }
 
