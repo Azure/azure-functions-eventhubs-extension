@@ -22,6 +22,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs
         private readonly ILogger _logger;
         private readonly IConfiguration _config;
         private readonly IOptions<EventHubOptions> _options;
+        private readonly IOptions<RetryPolicyOptions> _checkpointRetryPolicyOptions;
         private readonly IConverterManager _converterManager;
 
         public EventHubTriggerAttributeBindingProvider(
@@ -29,12 +30,14 @@ namespace Microsoft.Azure.WebJobs.EventHubs
             INameResolver nameResolver,
             IConverterManager converterManager,
             IOptions<EventHubOptions> options,
+            IOptions<RetryPolicyOptions> checkpointRetryPolicyOptions,
             ILoggerFactory loggerFactory)
         {
             _config = configuration;
             _nameResolver = nameResolver;
             _converterManager = converterManager;
             _options = options;
+            _checkpointRetryPolicyOptions = checkpointRetryPolicyOptions;
             _logger = loggerFactory?.CreateLogger(LogCategories.CreateTriggerCategory("EventHub"));
         }
 
@@ -84,6 +87,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs
                                                 eventHostListener,
                                                 singleDispatch,
                                                 _options.Value,
+                                                _checkpointRetryPolicyOptions.Value,
                                                 _logger);
                  return Task.FromResult(listener);
              };
