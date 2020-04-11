@@ -86,18 +86,10 @@ namespace Microsoft.Azure.WebJobs.EventHubs
 
         internal static void LogExceptionReceivedEvent(ExceptionReceivedEventArgs e, ILoggerFactory loggerFactory)
         {
-            try
-            {
-                var logger = loggerFactory?.CreateLogger(LogCategories.Executor);
-                string message = $"EventProcessorHost error (Action={e.Action}, HostName={e.Hostname}, PartitionId={e.PartitionId})";
+            var logger = loggerFactory?.CreateLogger(LogCategories.Executor);
+            string message = $"EventProcessorHost error (Action='{e.Action}', HostName='{e.Hostname}', PartitionId='{e.PartitionId}').";
 
-                var logLevel = GetLogLevel(e.Exception);
-                logger?.Log(logLevel, 0, message, e.Exception, (s, ex) => message);
-            }
-            catch
-            {
-                // best effort logging
-            }
+            Utility.LogException(e.Exception, message, logger);
         }
 
         private static LogLevel GetLogLevel(Exception ex)
