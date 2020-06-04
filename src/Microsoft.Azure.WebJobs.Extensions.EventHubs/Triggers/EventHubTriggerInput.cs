@@ -54,7 +54,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs
             return this.Events[this._selector];
         }
 
-        public Dictionary<string, string> GetTriggerDetails(PartitionContext context, int? retryCount)
+        public Dictionary<string, string> GetTriggerDetails(PartitionContext context, int retryCount)
         {
             if (Events.Length == 0)
             {
@@ -85,7 +85,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs
                 { "EnqueueTimeUtc", enqueueTimeUtc },
                 { "SequenceNumber", sequenceNumber },
                 { "Count", Events.Length.ToString()},
-                { "RetryCount", retryCount.HasValue ? retryCount.Value.ToString() : string.Empty }
+                { "RetryCount", retryCount.ToString() }
             };
         }
     }

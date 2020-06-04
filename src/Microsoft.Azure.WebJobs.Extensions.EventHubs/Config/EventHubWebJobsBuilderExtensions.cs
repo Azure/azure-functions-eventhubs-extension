@@ -5,6 +5,7 @@ using System;
 using Microsoft.Azure.EventHubs.Processor;
 using Microsoft.Azure.WebJobs;
 using Microsoft.Azure.WebJobs.EventHubs;
+using Microsoft.Azure.WebJobs.Extensions.Polly;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Microsoft.Extensions.Hosting
@@ -35,7 +36,9 @@ namespace Microsoft.Extensions.Hosting
                 throw new ArgumentNullException(nameof(configure));
             }
 
-            builder.AddExtension<EventHubExtensionConfigProvider>()
+            builder
+                .AddPollyRetryManager()
+                .AddExtension<EventHubExtensionConfigProvider>()
                 .BindOptions<EventHubOptions>();
 
             builder.Services.Configure<EventHubOptions>(options =>

@@ -19,10 +19,6 @@ using Microsoft.Extensions.Logging;
 using Microsoft.WindowsAzure.Storage.Blob;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using Polly;
-using Polly.CircuitBreaker;
-using Polly.Retry;
-using Polly.Wrap;
 
 namespace Microsoft.Azure.WebJobs.EventHubs
 {
@@ -38,11 +34,12 @@ namespace Microsoft.Azure.WebJobs.EventHubs
         private readonly EventProcessorHost _eventProcessorHost;
         private readonly bool _singleDispatch;
         private readonly EventHubOptions _options;
-        private readonly RetryPolicyOptions _checkpointRetryPolicyOptions;
+        //private readonly RetryPolicyOptions _checkpointRetryPolicyOptions;
         private readonly ILogger _logger;
         private bool _started;
         private CancellationTokenSource _cts = new CancellationTokenSource();
         private Lazy<EventHubsScaleMonitor> _scaleMonitor;
+        private readonly IRetryManagerProvider _retryProvider;
         private bool _disposed = false;
 
         public EventHubListener(
@@ -55,7 +52,8 @@ namespace Microsoft.Azure.WebJobs.EventHubs
             EventProcessorHost eventProcessorHost,
             bool singleDispatch,
             EventHubOptions options,
-            RetryPolicyOptions checkpointRetryPolicyOptions,
+            //RetryPolicyOptions checkpointRetryPolicyOptions,
+            IRetryManagerProvider retryProvider,
             ILogger logger,
             CloudBlobContainer blobContainer = null)
         {
@@ -68,9 +66,10 @@ namespace Microsoft.Azure.WebJobs.EventHubs
             _eventProcessorHost = eventProcessorHost;
             _singleDispatch = singleDispatch;
             _options = options;
-            _checkpointRetryPolicyOptions = checkpointRetryPolicyOptions;
+            //_checkpointRetryPolicyOptions = checkpointRetryPolicyOptions;
             _logger = logger;
             _scaleMonitor = new Lazy<EventHubsScaleMonitor>(() => new EventHubsScaleMonitor(_functionId, _eventHubName, _consumerGroup, _connectionString, _storageConnectionString, _logger, blobContainer));
+            _retryProvider = retryProvider;
         }
 
         void IListener.Cancel()
@@ -110,7 +109,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs
 
         IEventProcessor IEventProcessorFactory.CreateEventProcessor(PartitionContext context)
         {
-            return new EventProcessor(_options, _checkpointRetryPolicyOptions, _executor, _logger, _singleDispatch, _cts.Token);
+            return new EventProcessor(_options, _executor, _logger, _singleDispatch, _retryProvider, _cts.Token);
         }
 
         public IScaleMonitor GetMonitor()
@@ -144,24 +143,26 @@ namespace Microsoft.Azure.WebJobs.EventHubs
         internal class EventProcessor : IEventProcessor, ICheckpointer
         {
             private readonly ITriggeredFunctionExecutor _executor;
-            private readonly RetryPolicyOptions _checkpointRetryPolicyOptions;
+            //private readonly RetryPolicyOptions _checkpointRetryPolicyOptions;
             private readonly bool _singleDispatch;
             private readonly ILogger _logger;
             private readonly CancellationToken _cancellationToken;
             private readonly ICheckpointer _checkpointer;
             private readonly int _batchCheckpointFrequency;
             private int _batchCounter = 0;
+            private IRetryManagerProvider _retryProvider;
 
-            public EventProcessor(EventHubOptions options, RetryPolicyOptions checkpointRetryPolicyOptions,
-                ITriggeredFunctionExecutor executor, ILogger logger, bool singleDispatch, CancellationToken cancellationToken, ICheckpointer checkpointer = null)
+            public EventProcessor(EventHubOptions options,
+                ITriggeredFunctionExecutor executor, ILogger logger, bool singleDispatch, IRetryManagerProvider retryProvider, CancellationToken cancellationToken, ICheckpointer checkpointer = null)
             {
                 _checkpointer = checkpointer ?? this;
                 _executor = executor;
                 _singleDispatch = singleDispatch;
                 _batchCheckpointFrequency = options.BatchCheckpointFrequency;
-                _checkpointRetryPolicyOptions = checkpointRetryPolicyOptions;
+                //_checkpointRetryPolicyOptions = checkpointRetryPolicyOptions;
                 _logger = logger;
                 _cancellationToken = cancellationToken;
+                _retryProvider = retryProvider;
             }
 
             public Task CloseAsync(PartitionContext context, CloseReason reason)
@@ -198,7 +199,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs
 
             public async Task ProcessEventsAsync(PartitionContext context, IEnumerable<EventData> messages)
             {
-                RetryManager retryManager = new RetryManager(_checkpointRetryPolicyOptions, _logger);
+                IRetryManager retryManager = _retryProvider.Create(_logger);
 
                 await retryManager.ExecuteWithRetriesAsync(ExecuteAsync, new object[] { context, messages }, _cancellationToken);
 

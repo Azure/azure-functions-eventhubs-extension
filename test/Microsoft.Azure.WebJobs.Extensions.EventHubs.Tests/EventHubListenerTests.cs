@@ -37,7 +37,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
             {
                 BatchCheckpointFrequency = batchCheckpointFrequency
             };
-            var checkpointRetryPolicyOptions = new RetryPolicyOptions();
+            var retryProvider = new Mock<IRetryManagerProvider>();
             var checkpointer = new Mock<EventHubListener.ICheckpointer>(MockBehavior.Strict);
             checkpointer.Setup(p => p.CheckpointAsync(partitionContext)).Callback<PartitionContext>(c =>
             {
@@ -46,7 +46,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
             var loggerMock = new Mock<ILogger>();
             var executor = new Mock<ITriggeredFunctionExecutor>(MockBehavior.Strict);
             executor.Setup(p => p.TryExecuteAsync(It.IsAny<TriggeredFunctionData>(), It.IsAny<CancellationToken>())).ReturnsAsync(new FunctionResult(true));
-            var eventProcessor = new EventHubListener.EventProcessor(options, checkpointRetryPolicyOptions, executor.Object, loggerMock.Object, true, CancellationToken.None, checkpointer.Object);
+            var eventProcessor = new EventHubListener.EventProcessor(options, executor.Object, loggerMock.Object, true, retryProvider.Object, CancellationToken.None, checkpointer.Object);
 
             for (int i = 0; i < 100; i++)
             {
@@ -70,13 +70,13 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
             {
                 BatchCheckpointFrequency = batchCheckpointFrequency
             };
-            var checkpointRetryPolicyOptions = new RetryPolicyOptions();
+            var retryProvider = new Mock<IRetryManagerProvider>();
             var checkpointer = new Mock<EventHubListener.ICheckpointer>(MockBehavior.Strict);
             checkpointer.Setup(p => p.CheckpointAsync(partitionContext)).Returns(Task.CompletedTask);
             var loggerMock = new Mock<ILogger>();
             var executor = new Mock<ITriggeredFunctionExecutor>(MockBehavior.Strict);
             executor.Setup(p => p.TryExecuteAsync(It.IsAny<TriggeredFunctionData>(), It.IsAny<CancellationToken>())).ReturnsAsync(new FunctionResult(true));
-            var eventProcessor = new EventHubListener.EventProcessor(options, checkpointRetryPolicyOptions, executor.Object, loggerMock.Object, false, CancellationToken.None, checkpointer.Object);
+            var eventProcessor = new EventHubListener.EventProcessor(options, executor.Object, loggerMock.Object, false, retryProvider.Object, CancellationToken.None, checkpointer.Object);
 
             for (int i = 0; i < 100; i++)
             {
@@ -97,7 +97,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
         {
             var partitionContext = EventHubTests.GetPartitionContext();
             var options = new EventHubOptions();
-            var checkpointRetryPolicyOptions = new RetryPolicyOptions();
+            var retryProvider = new Mock<IRetryManagerProvider>();
             var checkpointer = new Mock<EventHubListener.ICheckpointer>(MockBehavior.Strict);
             checkpointer.Setup(p => p.CheckpointAsync(partitionContext)).Returns(Task.CompletedTask);
 
@@ -127,7 +127,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
 
             var loggerMock = new Mock<ILogger>();
 
-            var eventProcessor = new EventHubListener.EventProcessor(options, checkpointRetryPolicyOptions, executor.Object, loggerMock.Object, true, CancellationToken.None, checkpointer.Object);
+            var eventProcessor = new EventHubListener.EventProcessor(options, executor.Object, loggerMock.Object, true, retryProvider.Object, CancellationToken.None, checkpointer.Object);
 
             await eventProcessor.ProcessEventsAsync(partitionContext, events);
 
@@ -139,11 +139,11 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
         {
             var partitionContext = EventHubTests.GetPartitionContext();
             var options = new EventHubOptions();
-            var checkpointRetryPolicyOptions = new RetryPolicyOptions();
+            var retryProvider = new Mock<IRetryManagerProvider>();
             var checkpointer = new Mock<EventHubListener.ICheckpointer>(MockBehavior.Strict);
             var executor = new Mock<ITriggeredFunctionExecutor>(MockBehavior.Strict);
             var loggerMock = new Mock<ILogger>();
-            var eventProcessor = new EventHubListener.EventProcessor(options, checkpointRetryPolicyOptions, executor.Object, loggerMock.Object, true, CancellationToken.None, checkpointer.Object);
+            var eventProcessor = new EventHubListener.EventProcessor(options, executor.Object, loggerMock.Object, true, retryProvider.Object, CancellationToken.None, checkpointer.Object);
 
             await eventProcessor.CloseAsync(partitionContext, CloseReason.Shutdown);
 
@@ -155,11 +155,11 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
         {
             var partitionContext = EventHubTests.GetPartitionContext(partitionId: "123", eventHubPath: "abc", owner: "def");
             var options = new EventHubOptions();
-            var checkpointRetryPolicyOptions = new RetryPolicyOptions();
+            var retryProvider = new Mock<IRetryManagerProvider>();
             var checkpointer = new Mock<EventHubListener.ICheckpointer>(MockBehavior.Strict);
             var executor = new Mock<ITriggeredFunctionExecutor>(MockBehavior.Strict);
             var testLogger = new TestLogger("Test");
-            var eventProcessor = new EventHubListener.EventProcessor(options, checkpointRetryPolicyOptions, executor.Object, testLogger, true, CancellationToken.None, checkpointer.Object);
+            var eventProcessor = new EventHubListener.EventProcessor(options, executor.Object, testLogger, true, retryProvider.Object, CancellationToken.None, checkpointer.Object);
 
             var ex = new InvalidOperationException("My InvalidOperationException!");
 
@@ -175,11 +175,11 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
         {
             var partitionContext = EventHubTests.GetPartitionContext(partitionId: "123", eventHubPath: "abc", owner: "def");
             var options = new EventHubOptions();
-            var checkpointRetryPolicyOptions = new RetryPolicyOptions();
+            var retryProvider = new Mock<IRetryManagerProvider>();
             var checkpointer = new Mock<EventHubListener.ICheckpointer>(MockBehavior.Strict);
             var executor = new Mock<ITriggeredFunctionExecutor>(MockBehavior.Strict);
             var testLogger = new TestLogger("Test");
-            var eventProcessor = new EventHubListener.EventProcessor(options, checkpointRetryPolicyOptions, executor.Object, testLogger, true, CancellationToken.None, checkpointer.Object);
+            var eventProcessor = new EventHubListener.EventProcessor(options, executor.Object, testLogger, true, retryProvider.Object, CancellationToken.None, checkpointer.Object);
 
             // ctor is private
             var constructor = typeof(ReceiverDisconnectedException)
@@ -224,7 +224,8 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
                                     null,
                                     false,
                                     new EventHubOptions(),
-                                    new RetryPolicyOptions(),
+                                    //new RetryPolicyOptions(),
+                                    null,
                                     testLogger,
                                     new Mock<CloudBlobContainer>(MockBehavior.Strict, new Uri("https://eventhubsteststorageaccount.blob.core.windows.net/azure-webjobs-eventhub")).Object);
 

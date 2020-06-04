@@ -18,6 +18,8 @@ using Microsoft.WindowsAzure.Storage.Blob;
 using Moq;
 using Newtonsoft.Json;
 using Xunit;
+using LogLevel = Microsoft.Extensions.Logging.LogLevel;
+
 
 namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
 {
@@ -223,7 +225,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
             Assert.Equal(0, metrics.EventCount);
             Assert.NotEqual(default(DateTime), metrics.Timestamp);
 
-            var warning = _loggerProvider.GetAllLogMessages().Single(p => p.Level == Extensions.Logging.LogLevel.Warning);
+            var warning = _loggerProvider.GetAllLogMessages().Single(p => p.Level == LogLevel.Warning);
             var expectedWarning = $"Function '{_functionId}': Unable to deserialize partition or lease info with the following errors: " +
                                     $"Lease file data could not be found for blob on Partition: '0', EventHub: '{_eventHubName}', " +
                                     $"'{_consumerGroup}'. Error: Uh oh";
@@ -246,7 +248,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
             Assert.Equal(0, metrics.EventCount);
             Assert.NotEqual(default(DateTime), metrics.Timestamp);
 
-            warning = _loggerProvider.GetAllLogMessages().Single(p => p.Level == Extensions.Logging.LogLevel.Warning);
+            warning = _loggerProvider.GetAllLogMessages().Single(p => p.Level == LogLevel.Warning);
             expectedWarning = $"Function '{_functionId}': Unable to deserialize partition or lease info with the following errors: " +
                                 $"Could not deserialize blob lease info for blob on Partition: '0', EventHub: '{_eventHubName}', " +
                                 $"Consumer Group: '{_consumerGroup}'. Error: Uh oh";
@@ -269,7 +271,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
             Assert.Equal(0, metrics.EventCount);
             Assert.NotEqual(default(DateTime), metrics.Timestamp);
 
-            warning = _loggerProvider.GetAllLogMessages().Single(p => p.Level == Extensions.Logging.LogLevel.Warning);
+            warning = _loggerProvider.GetAllLogMessages().Single(p => p.Level == LogLevel.Warning);
             expectedWarning = $"Function '{_functionId}': Unable to deserialize partition or lease info with the following errors: " +
                                 $"Encountered exception while checking for last checkpointed sequence number for blob on Partition: '0', " +
                                 $"EventHub: '{_eventHubName}', Consumer Group: '{_consumerGroup}'. Error: Uh oh";
@@ -317,10 +319,10 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
 
             var logs = _loggerProvider.GetAllLogMessages().ToArray();
             var log = logs[0];
-            Assert.Equal(Extensions.Logging.LogLevel.Information, log.Level);
+            Assert.Equal(LogLevel.Information, log.Level);
             Assert.Equal("WorkerCount (17) > PartitionCount (16).", log.FormattedMessage);
             log = logs[1];
-            Assert.Equal(Extensions.Logging.LogLevel.Information, log.Level);
+            Assert.Equal(LogLevel.Information, log.Level);
             Assert.Equal($"Number of instances (17) is too high relative to number of partitions (16) for EventHubs entity ({_eventHubName}, {_consumerGroup}).", log.FormattedMessage);
 
             // verify again with a non generic context instance
@@ -357,10 +359,10 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
 
             var logs = _loggerProvider.GetAllLogMessages().ToArray();
             var log = logs[0];
-            Assert.Equal(Extensions.Logging.LogLevel.Information, log.Level);
+            Assert.Equal(LogLevel.Information, log.Level);
             Assert.Equal("EventCount (2900) > WorkerCount (1) * 1,000.", log.FormattedMessage);
             log = logs[1];
-            Assert.Equal(Extensions.Logging.LogLevel.Information, log.Level);
+            Assert.Equal(LogLevel.Information, log.Level);
             Assert.Equal($"Event count (2900) for EventHubs entity ({_eventHubName}, {_consumerGroup}) " +
                          $"is too high relative to the number of instances (1).", log.FormattedMessage);
 
@@ -397,7 +399,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
 
             var logs = _loggerProvider.GetAllLogMessages().ToArray();
             var log = logs[0];
-            Assert.Equal(Extensions.Logging.LogLevel.Information, log.Level);
+            Assert.Equal(LogLevel.Information, log.Level);
             Assert.Equal($"'{_eventHubName}' is idle.", log.FormattedMessage);
         }
 
@@ -424,7 +426,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
 
             var logs = _loggerProvider.GetAllLogMessages().ToArray();
             var log = logs[0];
-            Assert.Equal(Extensions.Logging.LogLevel.Information, log.Level);
+            Assert.Equal(LogLevel.Information, log.Level);
             Assert.Equal($"Event count is increasing for '{_eventHubName}'.", log.FormattedMessage);
         }
 
@@ -451,7 +453,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
 
             var logs = _loggerProvider.GetAllLogMessages().ToArray();
             var log = logs[0];
-            Assert.Equal(Extensions.Logging.LogLevel.Information, log.Level);
+            Assert.Equal(LogLevel.Information, log.Level);
             Assert.Equal($"Event count is decreasing for '{_eventHubName}'.", log.FormattedMessage);
         }
 
@@ -478,7 +480,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
 
             var logs = _loggerProvider.GetAllLogMessages().ToArray();
             var log = logs[0];
-            Assert.Equal(Extensions.Logging.LogLevel.Information, log.Level);
+            Assert.Equal(LogLevel.Information, log.Level);
             Assert.Equal($"EventHubs entity '{_eventHubName}' is steady.", log.FormattedMessage);
         }
     }

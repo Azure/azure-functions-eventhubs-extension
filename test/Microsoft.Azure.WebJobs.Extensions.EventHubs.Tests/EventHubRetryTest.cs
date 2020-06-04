@@ -34,9 +34,9 @@ namespace Microsoft.Azure.WebJobs.EventHubs.EndToEndTests
             };
             var logs = await ExecuteTest<ThrowException_AllRetriesExhaustedClass>(options);
 
-            Assert.Equal(3, logs.Where(x => x.Contains("New linar retry attempt")).Count());
+            Assert.Equal(3, logs.Where(x => x.Contains("New linear retry attempt")).Count());
             Assert.Equal(4, logs.Where(x => x.Contains("Execute with retry")).Count());
-            Assert.Single(logs.Where(x => x.Contains(", All retries have been exhausted")));
+            Assert.Single(logs.Where(x => x.Contains("All retries have been exhausted")));
         }
 
         [Fact]
@@ -49,7 +49,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.EndToEndTests
             };
             var logs = await ExecuteTest<ThrowException_SuccessedClass>(options);
 
-            Assert.Equal(3, logs.Where(x => x.Contains("New linar retry attempt")).Count());
+            Assert.Equal(3, logs.Where(x => x.Contains("New linear retry attempt")).Count());
             Assert.Equal(4, logs.Where(x => x.Contains("Execute with retry")).Count());
         }
 
@@ -68,9 +68,9 @@ namespace Microsoft.Azure.WebJobs.EventHubs.EndToEndTests
             watch.Stop();
 
             Assert.True(watch.ElapsedMilliseconds > 10000);
-            Assert.Equal(3, logs.Where(x => x.Contains("New linar retry attempt")).Count());
+            Assert.Equal(3, logs.Where(x => x.Contains("New linear retry attempt")).Count());
             Assert.Equal(4, logs.Where(x => x.Contains("Execute with retry")).Count());
-            Assert.Single(logs.Where(x => x.Contains(", All retries have been exhausted")));
+            Assert.Single(logs.Where(x => x.Contains("All retries have been exhausted")));
         }
 
         [Fact]
@@ -97,9 +97,9 @@ namespace Microsoft.Azure.WebJobs.EventHubs.EndToEndTests
 
             Assert.Single(logs.Where(x => x.Contains("Execute without retry")));
             Assert.Single(logs.Where(x => x.Contains("Function code returned retry settings")));
-            Assert.Equal(3, logs.Where(x => x.Contains("New linar retry attempt")).Count());
+            Assert.Equal(3, logs.Where(x => x.Contains("New linear retry attempt")).Count());
             Assert.Equal(4, logs.Where(x => x.Contains("Execute with retry")).Count());
-            Assert.Single(logs.Where(x => x.Contains(", All retries have been exhausted")));
+            Assert.Single(logs.Where(x => x.Contains("All retries have been exhausted")));
         }
 
         [Fact]
@@ -109,7 +109,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.EndToEndTests
 
             Assert.Single(logs.Where(x => x.Contains("Execute without retry")));
             Assert.Single(logs.Where(x => x.Contains("Function code returned retry settings")));
-            Assert.Equal(3, logs.Where(x => x.Contains("New linar retry attempt")).Count());
+            Assert.Equal(3, logs.Where(x => x.Contains("New linear retry attempt")).Count());
             Assert.Equal(4, logs.Where(x => x.Contains("Execute with retry")).Count());
         }
 
@@ -141,9 +141,9 @@ namespace Microsoft.Azure.WebJobs.EventHubs.EndToEndTests
             };
             var logs = await ExecuteTest<ReturnRetry_WinsClass>(options);
 
-            Assert.Equal(6, logs.Where(x => x.Contains("New linar retry attempt")).Count());
+            Assert.Equal(6, logs.Where(x => x.Contains("New linear retry attempt")).Count());
             Assert.Equal(8, logs.Where(x => x.Contains("Execute with retry")).Count());
-            Assert.Single(logs.Where(x => x.Contains(", All retries have been exhausted")));
+            Assert.Single(logs.Where(x => x.Contains("All retries have been exhausted")));
         }
 
         private async Task<string[]> ExecuteTest<T>(RetryPolicyOptions options, bool checkForTimeout = true)
