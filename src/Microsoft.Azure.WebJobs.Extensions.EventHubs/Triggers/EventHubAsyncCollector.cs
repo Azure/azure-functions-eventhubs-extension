@@ -25,8 +25,8 @@ namespace Microsoft.Azure.WebJobs.EventHubs
               
         private const int BatchSize = 100;
 
-        // Suggested to use 240k instead of 256k to leave padding room for headers.
-        private const int MaxByteSize = 240 * 1024;
+        // Suggested to use 1008k instead of 1024k to leave padding room for headers.
+        private const int MaxByteSize = 1008 * 1024;
 
         private readonly ILogger _logger;
 
