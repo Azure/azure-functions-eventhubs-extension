@@ -15,7 +15,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs
     /// <summary>
     /// Core object to send events to EventHub. 
     /// Any user parameter that sends EventHub events will eventually get bound to this object. 
-    /// This will queue events and send in batches, also keeping under the 256kb event hub limit per batch. 
+    /// This will queue events and send in batches, also keeping under the 1024kb event hub limit per batch. 
     /// </summary>
     internal class EventHubAsyncCollector : IAsyncCollector<EventData>
     {
@@ -25,8 +25,8 @@ namespace Microsoft.Azure.WebJobs.EventHubs
               
         private const int BatchSize = 100;
 
-        // Suggested to use 240k instead of 256k to leave padding room for headers.
-        private const int MaxByteSize = 240 * 1024;
+        // Suggested to use 1008k instead of 1024k to leave padding room for headers.
+        private const int MaxByteSize = 1008 * 1024;
 
         private readonly ILogger _logger;
 
