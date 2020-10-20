@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Microsoft.Azure.EventHubs;
 using Microsoft.Azure.EventHubs.Processor;
 using Microsoft.Azure.WebJobs.Description;
+using Microsoft.Azure.WebJobs.Host;
 using Microsoft.Azure.WebJobs.Host.Bindings;
 using Microsoft.Azure.WebJobs.Host.Config;
 using Microsoft.Azure.WebJobs.Host.Configuration;
@@ -23,20 +24,24 @@ namespace Microsoft.Azure.WebJobs.EventHubs
     {
         public IConfiguration _config;
         private readonly IOptions<EventHubOptions> _options;
+        private readonly IOptions<RetryPolicyOptions> _checkpointRetryPolicyOptions;
         private readonly ILoggerFactory _loggerFactory;
         private readonly IConverterManager _converterManager;
         private readonly INameResolver _nameResolver;
         private readonly IWebJobsExtensionConfiguration<EventHubExtensionConfigProvider> _configuration;
+        private readonly IRetryManagerProvider _retryProvider;
 
-        public EventHubExtensionConfigProvider(IConfiguration config, IOptions<EventHubOptions> options, ILoggerFactory loggerFactory,
-            IConverterManager converterManager, INameResolver nameResolver, IWebJobsExtensionConfiguration<EventHubExtensionConfigProvider> configuration)
+        public EventHubExtensionConfigProvider(IConfiguration config, IOptions<EventHubOptions> options, IOptions<RetryPolicyOptions> checkpointRetryPolicyOptions, ILoggerFactory loggerFactory,
+            IConverterManager converterManager, INameResolver nameResolver, IWebJobsExtensionConfiguration<EventHubExtensionConfigProvider> configuration, IRetryManagerProvider retryProvider)
         {
             _config = config;
             _options = options;
+            _checkpointRetryPolicyOptions = checkpointRetryPolicyOptions;
             _loggerFactory = loggerFactory;
             _converterManager = converterManager;
             _nameResolver = nameResolver;
             _configuration = configuration;
+            _retryProvider = retryProvider;
         }
 
         internal Action<ExceptionReceivedEventArgs> ExceptionHandler { get; set; }
@@ -64,7 +69,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs
                 .AddOpenConverter<OpenType.Poco, EventData>(ConvertPocoToEventData);
 
             // register our trigger binding provider
-            var triggerBindingProvider = new EventHubTriggerAttributeBindingProvider(_config, _nameResolver, _converterManager, _options, _loggerFactory);
+            var triggerBindingProvider = new EventHubTriggerAttributeBindingProvider(_config, _nameResolver, _converterManager, _options, _checkpointRetryPolicyOptions, _retryProvider, _loggerFactory);
             context.AddBindingRule<EventHubTriggerAttribute>()
                 .BindToTrigger(triggerBindingProvider);
 

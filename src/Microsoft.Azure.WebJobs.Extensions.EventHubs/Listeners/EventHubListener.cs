@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 using Microsoft.Azure.EventHubs;
 using Microsoft.Azure.EventHubs.Processor;
 using Microsoft.Azure.WebJobs.EventHubs.Listeners;
+using Microsoft.Azure.WebJobs.Host;
 using Microsoft.Azure.WebJobs.Host.Executors;
 using Microsoft.Azure.WebJobs.Host.Listeners;
 using Microsoft.Azure.WebJobs.Host.Scale;
@@ -33,10 +34,13 @@ namespace Microsoft.Azure.WebJobs.EventHubs
         private readonly EventProcessorHost _eventProcessorHost;
         private readonly bool _singleDispatch;
         private readonly EventHubOptions _options;
+        //private readonly RetryPolicyOptions _checkpointRetryPolicyOptions;
         private readonly ILogger _logger;
         private bool _started;
-
+        private CancellationTokenSource _cts = new CancellationTokenSource();
         private Lazy<EventHubsScaleMonitor> _scaleMonitor;
+        private readonly IRetryManagerProvider _retryProvider;
+        private bool _disposed = false;
 
         public EventHubListener(
             string functionId,
@@ -48,6 +52,8 @@ namespace Microsoft.Azure.WebJobs.EventHubs
             EventProcessorHost eventProcessorHost,
             bool singleDispatch,
             EventHubOptions options,
+            //RetryPolicyOptions checkpointRetryPolicyOptions,
+            IRetryManagerProvider retryProvider,
             ILogger logger,
             CloudBlobContainer blobContainer = null)
         {
@@ -60,8 +66,10 @@ namespace Microsoft.Azure.WebJobs.EventHubs
             _eventProcessorHost = eventProcessorHost;
             _singleDispatch = singleDispatch;
             _options = options;
+            //_checkpointRetryPolicyOptions = checkpointRetryPolicyOptions;
             _logger = logger;
             _scaleMonitor = new Lazy<EventHubsScaleMonitor>(() => new EventHubsScaleMonitor(_functionId, _eventHubName, _consumerGroup, _connectionString, _storageConnectionString, _logger, blobContainer));
+            _retryProvider = retryProvider;
         }
 
         void IListener.Cancel()
@@ -69,12 +77,20 @@ namespace Microsoft.Azure.WebJobs.EventHubs
             StopAsync(CancellationToken.None).Wait();
         }
 
+
         void IDisposable.Dispose()
         {
+            Dispose(true);
         }
 
         public async Task StartAsync(CancellationToken cancellationToken)
         {
+            if (_cts.IsCancellationRequested)
+            {
+                _cts.Dispose();
+                _cts = new CancellationTokenSource();
+            }
+
             await _eventProcessorHost.RegisterEventProcessorFactoryAsync(this, _options.EventProcessorOptions);
             _started = true;
         }
@@ -83,6 +99,9 @@ namespace Microsoft.Azure.WebJobs.EventHubs
         {
             if (_started)
             {
+                // signal cancellation for any in progress executions 
+                _cts.Cancel();
+
                 await _eventProcessorHost.UnregisterEventProcessorAsync();
             }
             _started = false;
@@ -90,7 +109,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs
 
         IEventProcessor IEventProcessorFactory.CreateEventProcessor(PartitionContext context)
         {
-            return new EventProcessor(_options, _executor, _logger, _singleDispatch);
+            return new EventProcessor(_options, _executor, _logger, _singleDispatch, _retryProvider, _cts.Token);
         }
 
         public IScaleMonitor GetMonitor()
@@ -106,33 +125,48 @@ namespace Microsoft.Azure.WebJobs.EventHubs
             Task CheckpointAsync(PartitionContext context);
         }
 
+        private void Dispose(bool disposing)
+        {
+            if (!_disposed)
+            {
+                if (disposing)
+                {
+                    _cts.Dispose();
+                }
+
+                _disposed = true;
+            }
+        }
+
         // We get a new instance each time Start() is called. 
         // We'll get a listener per partition - so they can potentialy run in parallel even on a single machine.
-        internal class EventProcessor : IEventProcessor, IDisposable, ICheckpointer
+        internal class EventProcessor : IEventProcessor, ICheckpointer
         {
             private readonly ITriggeredFunctionExecutor _executor;
+            //private readonly RetryPolicyOptions _checkpointRetryPolicyOptions;
             private readonly bool _singleDispatch;
             private readonly ILogger _logger;
-            private readonly CancellationTokenSource _cts = new CancellationTokenSource();
+            private readonly CancellationToken _cancellationToken;
             private readonly ICheckpointer _checkpointer;
             private readonly int _batchCheckpointFrequency;
             private int _batchCounter = 0;
-            private bool _disposed = false;
+            private IRetryManagerProvider _retryProvider;
 
-            public EventProcessor(EventHubOptions options, ITriggeredFunctionExecutor executor, ILogger logger, bool singleDispatch, ICheckpointer checkpointer = null)
+            public EventProcessor(EventHubOptions options,
+                ITriggeredFunctionExecutor executor, ILogger logger, bool singleDispatch, IRetryManagerProvider retryProvider, CancellationToken cancellationToken, ICheckpointer checkpointer = null)
             {
                 _checkpointer = checkpointer ?? this;
                 _executor = executor;
                 _singleDispatch = singleDispatch;
                 _batchCheckpointFrequency = options.BatchCheckpointFrequency;
+                //_checkpointRetryPolicyOptions = checkpointRetryPolicyOptions;
                 _logger = logger;
+                _cancellationToken = cancellationToken;
+                _retryProvider = retryProvider;
             }
 
             public Task CloseAsync(PartitionContext context, CloseReason reason)
             {
-                // signal cancellation for any in progress executions 
-                _cts.Cancel();
-                
                 _logger.LogDebug(GetOperationDetails(context, $"CloseAsync, {reason.ToString()}"));
                 return Task.CompletedTask;
             }
@@ -154,6 +188,24 @@ namespace Microsoft.Azure.WebJobs.EventHubs
 
             public async Task ProcessEventsAsync(PartitionContext context, IEnumerable<EventData> messages)
             {
+                IRetryManager retryManager = _retryProvider.Create(_logger);
+
+                await retryManager.ExecuteWithRetriesAsync(ExecuteAsync, new object[] { context, messages }, _cancellationToken);
+
+                if (_cancellationToken.IsCancellationRequested)
+                {
+                    _logger.LogDebug("All executions were completed but checkpointing was not performed as a cancellation was requested");
+                    return;
+                }
+
+                await CheckpointAsync(context, messages);
+            }
+
+            private async Task<IEnumerable<FunctionResult>> ExecuteAsync(int retryCount, object[] args)
+            {
+                PartitionContext context = (PartitionContext)args[0];
+                IEnumerable<EventData> messages = (IEnumerable<EventData>)args[1];
+
                 var triggerInput = new EventHubTriggerInput
                 {
                     Events = messages.ToArray(),
@@ -161,14 +213,14 @@ namespace Microsoft.Azure.WebJobs.EventHubs
                 };
 
                 TriggeredFunctionData input = null;
+                List<Task<FunctionResult>> invocationTasks = new List<Task<FunctionResult>>();
                 if (_singleDispatch)
                 {
                     // Single dispatch
                     int eventCount = triggerInput.Events.Length;
-                    List<Task> invocationTasks = new List<Task>();
                     for (int i = 0; i < eventCount; i++)
                     {
-                        if (_cts.IsCancellationRequested)
+                        if (_cancellationToken.IsCancellationRequested)
                         {
                             break;
                         }
@@ -177,17 +229,11 @@ namespace Microsoft.Azure.WebJobs.EventHubs
                         input = new TriggeredFunctionData
                         {
                             TriggerValue = eventHubTriggerInput,
-                            TriggerDetails = eventHubTriggerInput.GetTriggerDetails(context)
+                            TriggerDetails = eventHubTriggerInput.GetTriggerDetails(context, retryCount),
                         };
 
-                        Task task = TryExecuteWithLoggingAsync(input, triggerInput.Events[i]);
+                        Task<FunctionResult> task = TryExecuteWithLoggingAsync(input, triggerInput.Events[i]);
                         invocationTasks.Add(task);
-                    }
-
-                    // Drain the whole batch before taking more work
-                    if (invocationTasks.Count > 0)
-                    {
-                        await Task.WhenAll(invocationTasks);
                     }
                 }
                 else
@@ -196,15 +242,26 @@ namespace Microsoft.Azure.WebJobs.EventHubs
                     input = new TriggeredFunctionData
                     {
                         TriggerValue = triggerInput,
-                        TriggerDetails = triggerInput.GetTriggerDetails(context)
+                        TriggerDetails = triggerInput.GetTriggerDetails(context, retryCount)
                     };
 
                     using (_logger.BeginScope(GetLinksScope(triggerInput.Events)))
                     {
-                        await _executor.TryExecuteAsync(input, _cts.Token);
+                        invocationTasks.Add(_executor.TryExecuteAsync(input, _cancellationToken));
                     }
                 }
 
+                // Drain the whole batch before taking more work
+                if (invocationTasks.Count > 0)
+                {
+                    await Task.WhenAll(invocationTasks);
+                }
+
+                return invocationTasks.Select(x => x.Result);
+            }
+
+            private async Task CheckpointAsync(PartitionContext context, IEnumerable<EventData> messages)
+            {
                 // Dispose all messages to help with memory pressure. If this is missed, the finalizer thread will still get them.
                 bool hasEvents = false;
                 foreach (var message in messages)
@@ -226,11 +283,11 @@ namespace Microsoft.Azure.WebJobs.EventHubs
                 }
             }
 
-            private async Task TryExecuteWithLoggingAsync(TriggeredFunctionData input, EventData message)
+            private async Task<FunctionResult> TryExecuteWithLoggingAsync(TriggeredFunctionData input, EventData message)
             {
                 using (_logger.BeginScope(GetLinksScope(message)))
                 {
-                    await _executor.TryExecuteAsync(input, _cts.Token);
+                    return await _executor.TryExecuteAsync(input, _cancellationToken);
                 }
             }
 
@@ -256,24 +313,6 @@ namespace Microsoft.Azure.WebJobs.EventHubs
                 {
                     _logger.LogDebug(GetOperationDetails(context, "CheckpointAsync"));
                 }
-            }
-
-            protected virtual void Dispose(bool disposing)
-            {
-                if (!_disposed)
-                {
-                    if (disposing)
-                    {
-                        _cts.Dispose();
-                    }
-
-                    _disposed = true;
-                }
-            }
-
-            public void Dispose()
-            {
-                Dispose(true);
             }
 
             async Task ICheckpointer.CheckpointAsync(PartitionContext context)

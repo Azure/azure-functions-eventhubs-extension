@@ -269,13 +269,14 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
         {
             var partitionContext = EventHubTests.GetPartitionContext();
             var options = new EventHubOptions { BatchCheckpointFrequency = 1 };
-            
+            var retryProvider = new Mock<IRetryManagerProvider>();
+
             var checkpointer = new Mock<EventHubListener.ICheckpointer>();
 
             var loggerMock = new Mock<ILogger>();
             var executor = new Mock<ITriggeredFunctionExecutor>(MockBehavior.Strict);
             executor.Setup(p => p.TryExecuteAsync(It.IsAny<TriggeredFunctionData>(), It.IsAny<CancellationToken>())).ReturnsAsync(new FunctionResult(true));
-            var eventProcessor = new EventHubListener.EventProcessor(options, executor.Object, loggerMock.Object, true, checkpointer.Object);
+            var eventProcessor = new EventHubListener.EventProcessor(options, executor.Object, loggerMock.Object, true, retryProvider.Object, CancellationToken.None, checkpointer.Object);
 
             var diagnosticId = $"00-{ActivityTraceId.CreateRandom().ToHexString()}-{ActivitySpanId.CreateRandom().ToHexString()}-01";
 
@@ -302,13 +303,14 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
         {
             var partitionContext = EventHubTests.GetPartitionContext();
             var options = new EventHubOptions { BatchCheckpointFrequency = 1 };
+            var retryProvider = new Mock<IRetryManagerProvider>();
 
             var checkpointer = new Mock<EventHubListener.ICheckpointer>();
 
             var loggerMock = new Mock<ILogger>();
             var executor = new Mock<ITriggeredFunctionExecutor>(MockBehavior.Strict);
             executor.Setup(p => p.TryExecuteAsync(It.IsAny<TriggeredFunctionData>(), It.IsAny<CancellationToken>())).ReturnsAsync(new FunctionResult(true));
-            var eventProcessor = new EventHubListener.EventProcessor(options, executor.Object, loggerMock.Object, true, checkpointer.Object);
+            var eventProcessor = new EventHubListener.EventProcessor(options, executor.Object, loggerMock.Object, true, retryProvider.Object, CancellationToken.None, checkpointer.Object);
 
             var diagnosticId = $"00-{ActivityTraceId.CreateRandom().ToHexString()}-{ActivitySpanId.CreateRandom().ToHexString()}-01";
 

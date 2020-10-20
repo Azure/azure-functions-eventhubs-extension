@@ -22,20 +22,26 @@ namespace Microsoft.Azure.WebJobs.EventHubs
         private readonly ILogger _logger;
         private readonly IConfiguration _config;
         private readonly IOptions<EventHubOptions> _options;
+        //private readonly IOptions<RetryPolicyOptions> _checkpointRetryPolicyOptions;
         private readonly IConverterManager _converterManager;
+        private readonly IRetryManagerProvider _retryProvider;
 
         public EventHubTriggerAttributeBindingProvider(
             IConfiguration configuration,
             INameResolver nameResolver,
             IConverterManager converterManager,
             IOptions<EventHubOptions> options,
+            IOptions<RetryPolicyOptions> checkpointRetryPolicyOptions,
+            IRetryManagerProvider retryProvider,
             ILoggerFactory loggerFactory)
         {
             _config = configuration;
             _nameResolver = nameResolver;
             _converterManager = converterManager;
             _options = options;
+            //_checkpointRetryPolicyOptions = checkpointRetryPolicyOptions;
             _logger = loggerFactory?.CreateLogger(LogCategories.CreateTriggerCategory("EventHub"));
+            _retryProvider = retryProvider;
         }
 
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Reliability", "CA2000:Dispose objects before losing scope")]
@@ -84,6 +90,8 @@ namespace Microsoft.Azure.WebJobs.EventHubs
                                                 eventHostListener,
                                                 singleDispatch,
                                                 _options.Value,
+                                                //_checkpointRetryPolicyOptions.Value,
+                                                _retryProvider,
                                                 _logger);
                  return Task.FromResult(listener);
              };

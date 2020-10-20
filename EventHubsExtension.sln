@@ -7,6 +7,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WebJobs.Extensions.EventHub
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WebJobs.Extensions.EventHubs.Tests", "test\Microsoft.Azure.WebJobs.Extensions.EventHubs.Tests\WebJobs.Extensions.EventHubs.Tests.csproj", "{D37637D5-7EF9-43CB-86BE-537473CD613B}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sample", "sample\Sample\Sample.csproj", "{FD0A770F-3718-4100-903A-90044C31B05E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +23,10 @@ Global
 		{D37637D5-7EF9-43CB-86BE-537473CD613B}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D37637D5-7EF9-43CB-86BE-537473CD613B}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D37637D5-7EF9-43CB-86BE-537473CD613B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FD0A770F-3718-4100-903A-90044C31B05E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FD0A770F-3718-4100-903A-90044C31B05E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FD0A770F-3718-4100-903A-90044C31B05E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FD0A770F-3718-4100-903A-90044C31B05E}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

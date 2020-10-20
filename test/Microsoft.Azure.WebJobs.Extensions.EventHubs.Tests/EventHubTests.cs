@@ -27,13 +27,14 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
             var strategy = new EventHubTriggerBindingStrategy();
             var contract = strategy.GetBindingContract();
 
-            Assert.Equal(7, contract.Count);
+            Assert.Equal(8, contract.Count);
             Assert.Equal(typeof(PartitionContext), contract["PartitionContext"]);
             Assert.Equal(typeof(string), contract["Offset"]);
             Assert.Equal(typeof(long), contract["SequenceNumber"]);
             Assert.Equal(typeof(DateTime), contract["EnqueuedTimeUtc"]);
             Assert.Equal(typeof(IDictionary<string, object>), contract["Properties"]);
             Assert.Equal(typeof(IDictionary<string, object>), contract["SystemProperties"]);
+            Assert.Equal(typeof(RetryResult).MakeByRefType(), contract["$return"]);
         }
 
         [Fact]
@@ -42,13 +43,14 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
             var strategy = new EventHubTriggerBindingStrategy();
             var contract = strategy.GetBindingContract(true);
 
-            Assert.Equal(7, contract.Count);
+            Assert.Equal(8, contract.Count);
             Assert.Equal(typeof(PartitionContext), contract["PartitionContext"]);
             Assert.Equal(typeof(string), contract["Offset"]);
             Assert.Equal(typeof(long), contract["SequenceNumber"]);
             Assert.Equal(typeof(DateTime), contract["EnqueuedTimeUtc"]);
             Assert.Equal(typeof(IDictionary<string, object>), contract["Properties"]);
             Assert.Equal(typeof(IDictionary<string, object>), contract["SystemProperties"]);
+            Assert.Equal(typeof(RetryResult).MakeByRefType(), contract["$return"]);
         }
 
         [Fact]
@@ -57,7 +59,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
             var strategy = new EventHubTriggerBindingStrategy();
             var contract = strategy.GetBindingContract(false);
 
-            Assert.Equal(7, contract.Count);
+            Assert.Equal(8, contract.Count);
             Assert.Equal(typeof(PartitionContext), contract["PartitionContext"]);
             Assert.Equal(typeof(string[]), contract["PartitionKeyArray"]);
             Assert.Equal(typeof(string[]), contract["OffsetArray"]);
@@ -65,6 +67,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
             Assert.Equal(typeof(DateTime[]), contract["EnqueuedTimeUtcArray"]);
             Assert.Equal(typeof(IDictionary<string, object>[]), contract["PropertiesArray"]);
             Assert.Equal(typeof(IDictionary<string, object>[]), contract["SystemPropertiesArray"]);
+            Assert.Equal(typeof(RetryResult).MakeByRefType(), contract["$return"]);
         }
 
         [Fact]

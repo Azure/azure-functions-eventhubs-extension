@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Text;
 using Microsoft.Azure.EventHubs;
 using Microsoft.Azure.EventHubs.Processor;
+using Microsoft.Azure.WebJobs.Host;
 using Microsoft.Azure.WebJobs.Host.Bindings;
 using Microsoft.Azure.WebJobs.Host.Triggers;
 
@@ -54,6 +55,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs
             AddBindingContractMember(contract, "EnqueuedTimeUtc", typeof(DateTime), isSingleDispatch);
             AddBindingContractMember(contract, "Properties", typeof(IDictionary<string, object>), isSingleDispatch);
             AddBindingContractMember(contract, "SystemProperties", typeof(IDictionary<string, object>), isSingleDispatch);
+            contract.Add("$return", typeof(RetryResult).MakeByRefType());
 
             return contract;
         }

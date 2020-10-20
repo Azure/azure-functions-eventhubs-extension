@@ -16,7 +16,7 @@ using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
 using Xunit;
 
-namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
+namespace Microsoft.Azure.WebJobs.EventHubs.EndToEndTests
 {
     public class EventHubEndToEndTests
     {
@@ -36,7 +36,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
         [Fact]
         public async Task EventHub_PocoBinding()
         {
-            var tuple = BuildHost<EventHubTestBindToPocoJobs>();
+            var tuple = await BuildHost<EventHubTestBindToPocoJobs>();
             using (var host = tuple.Item1)
             {
                 var method = typeof(EventHubTestBindToPocoJobs).GetMethod(nameof(EventHubTestBindToPocoJobs.SendEvent_TestHub), BindingFlags.Static | BindingFlags.Public);
@@ -54,7 +54,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
         [Fact]
         public async Task EventHub_StringBinding()
         {
-            var tuple = BuildHost<EventHubTestBindToStringJobs>();
+            var tuple = await BuildHost<EventHubTestBindToStringJobs>();
             using (var host = tuple.Item1)
             {
                 var method = typeof(EventHubTestBindToStringJobs).GetMethod(nameof(EventHubTestBindToStringJobs.SendEvent_TestHub), BindingFlags.Static | BindingFlags.Public);
@@ -72,7 +72,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
         [Fact]
         public async Task EventHub_SingleDispatch()
         {
-            Tuple<JobHost, IHost> tuple = BuildHost<EventHubTestSingleDispatchJobs>();
+            Tuple<JobHost, IHost> tuple = await BuildHost<EventHubTestSingleDispatchJobs>();
             using (var host = tuple.Item1)
             {
                 var method = typeof(EventHubTestSingleDispatchJobs).GetMethod(nameof(EventHubTestSingleDispatchJobs.SendEvent_TestHub), BindingFlags.Static | BindingFlags.Public);
@@ -105,7 +105,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
         [Fact]
         public async Task EventHub_MultipleDispatch()
         {
-            Tuple<JobHost, IHost> tuple = BuildHost<EventHubTestMultipleDispatchJobs>();
+            Tuple<JobHost, IHost> tuple = await BuildHost<EventHubTestMultipleDispatchJobs>();
             using (var host = tuple.Item1)
             {
                 // send some events BEFORE starting the host, to ensure
@@ -141,7 +141,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
         [Fact]
         public async Task EventHub_PartitionKey()
         {
-            Tuple<JobHost, IHost> tuple = BuildHost<EventHubPartitionKeyTestJobs>();
+            Tuple<JobHost, IHost> tuple = await BuildHost<EventHubPartitionKeyTestJobs>();
             using (var host = tuple.Item1)
             {
                 var method = typeof(EventHubPartitionKeyTestJobs).GetMethod("SendEvents_TestHub", BindingFlags.Static | BindingFlags.Public);
@@ -296,39 +296,11 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             }
         }
 
-        private Tuple<JobHost, IHost> BuildHost<T>()
+        private async Task<Tuple<JobHost, IHost>> BuildHost<T>()
         {
-            JobHost jobHost = null;
+            await EventHubTestHelper.CheckpointOldEvents(TestHubName);
 
-            var config = new ConfigurationBuilder()
-                .AddEnvironmentVariables()
-                .AddTestSettings()
-                .Build();
-
-            const string connectionName = "AzureWebJobsTestHubConnection";
-            string connection = config.GetConnectionStringOrSetting(connectionName);
-            Assert.True(!string.IsNullOrEmpty(connection), $"Required test connection string '{connectionName}' is missing.");
-
-            IHost host = new HostBuilder()
-                .ConfigureDefaultTestHost<T>(b =>
-                {
-                    b.AddEventHubs(options =>
-                    {
-                        options.EventProcessorOptions.EnableReceiverRuntimeMetric = true;
-                        options.AddSender(TestHubName, connection);
-                        options.AddReceiver(TestHubName, connection);
-                    });
-                })
-                .ConfigureLogging(b =>
-                {
-                    b.SetMinimumLevel(LogLevel.Debug);
-                })
-                .Build();
-
-            jobHost = host.GetJobHost();
-            jobHost.StartAsync().GetAwaiter().GetResult();
-
-            return new Tuple<JobHost, IHost>(jobHost, host);
+            return EventHubTestHelper.BuildHost<T>(TestHubName);
         }
         public class TestPoco
         {
