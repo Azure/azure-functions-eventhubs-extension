@@ -60,6 +60,8 @@ namespace Microsoft.Azure.WebJobs.EventHubs
             }
         }
 
+        public InitialOffsetOptions InitialOffsetOptions { get; set; }
+
         public EventProcessorOptions EventProcessorOptions { get; }
 
         public PartitionManagerOptions PartitionManagerOptions { get; }
