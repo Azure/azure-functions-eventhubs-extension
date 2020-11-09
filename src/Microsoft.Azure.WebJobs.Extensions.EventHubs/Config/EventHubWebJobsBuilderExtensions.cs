@@ -48,8 +48,8 @@ namespace Microsoft.Extensions.Hosting
 
         public static void ConfigureOptions(EventHubOptions options)
         {
-            string offsetType = options.InitialOffsetOptions.Type.ToLower();
-            if (!offsetType.Equals(""))
+            string offsetType = options?.InitialOffsetOptions?.Type?.ToLower() ?? String.Empty;
+            if (!offsetType.Equals(String.Empty))
             {
                 switch (offsetType)
                 {
@@ -60,8 +60,8 @@ namespace Microsoft.Extensions.Hosting
                         options.EventProcessorOptions.InitialOffsetProvider = (s) => { return EventPosition.FromEnd(); };
                         break;
                     case "fromenqueuedtime":
-                        DateTime enqueuedTime = DateTime.Parse(options.InitialOffsetOptions.EnqueuedTime);
-                        options.EventProcessorOptions.InitialOffsetProvider = (s) => { return EventPosition.FromEnqueuedTime(enqueuedTime); };
+                        DateTime enqueuedTimeUTC = DateTime.Parse(options.InitialOffsetOptions.EnqueuedTimeUTC).ToUniversalTime();
+                        options.EventProcessorOptions.InitialOffsetProvider = (s) => { return EventPosition.FromEnqueuedTime(enqueuedTimeUTC); };
                         break;
                     default:
                         throw new InvalidOperationException("An unsupported value was supplied for initialOffsetOptions.type");

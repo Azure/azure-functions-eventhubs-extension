@@ -18,7 +18,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs
 {
     public class InitialOffsetOptions
     {
-        public string Type { get; set; }
-        public string EnqueuedTime { get; set; }
+        public string Type { get; set; } = "";
+        public string EnqueuedTimeUTC { get; set; } = "";
     }
 }
