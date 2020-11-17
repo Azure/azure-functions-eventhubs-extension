@@ -393,11 +393,22 @@ namespace Microsoft.Azure.WebJobs.EventHubs
                 };
             }
 
+            JObject initialOffsetOptions = null;
+            if (InitialOffsetOptions != null)
+            {
+                initialOffsetOptions = new JObject
+                {
+                    { nameof(InitialOffsetOptions.Type), InitialOffsetOptions.Type },
+                    { nameof(InitialOffsetOptions.EnqueuedTimeUTC), InitialOffsetOptions.EnqueuedTimeUTC },
+                };
+            }
+
             JObject options = new JObject
             {
                 { nameof(BatchCheckpointFrequency), BatchCheckpointFrequency },
                 { nameof(EventProcessorOptions), eventProcessorOptions },
-                { nameof(PartitionManagerOptions), partitionManagerOptions }
+                { nameof(PartitionManagerOptions), partitionManagerOptions },
+                { nameof(InitialOffsetOptions), initialOffsetOptions }
             };
 
             return options.ToString(Formatting.Indented);

@@ -194,7 +194,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             {
                 // We don't expect to get signalled as there will be messages recieved with a FromEnd initial offset
                 bool result = _eventWait.WaitOne(Timeout);
-                Assert.False(result);
+                Assert.False(result, "An event was received while none were expected.");
             }
         }
 
@@ -214,14 +214,18 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             var initialOffsetOptions = new InitialOffsetOptions()
             {
                 Type = "FromEnqueuedTime",
-                EnqueuedTimeUTC = _initialOffsetEnqueuedTimeUTC.ToString("yyyy-MM-ddThh:mm:ssZ")
+                EnqueuedTimeUTC = _initialOffsetEnqueuedTimeUTC.ToString("yyyy-MM-ddTHH:mm:ssZ")
             };
             using (var host = BuildHost<EventHubTestInitialOffsetFromEnqueuedTimeJobs>(initialOffsetOptions).Item1)
             {
                 // Validation that we only got messages after the configured FromEnqueuedTime is done in the JobHost
                 bool result = _eventWait.WaitOne(Timeout);
-                Assert.True(result);
-                Assert.True(_earliestReceivedMessageEnqueuedTimeUTC > _initialOffsetEnqueuedTimeUTC);
+                Assert.True(result, $"No event was received within the timeout period of {Timeout}. " +
+                    $"Expected event sent shortly after {_initialOffsetEnqueuedTimeUTC.ToString("yyyy-MM-ddTHH:mm:ssZ")} with content {_testId}");
+                Assert.True(_earliestReceivedMessageEnqueuedTimeUTC > _initialOffsetEnqueuedTimeUTC, 
+                    "A message was received that was enqueued before the configured Initial Offset Enqueued Time. " + 
+                    $"Received message enqueued time: {_earliestReceivedMessageEnqueuedTimeUTC?.ToString("yyyy-MM-ddTHH:mm:ssZ")}" + 
+                    $", initial offset enqueued time: {_initialOffsetEnqueuedTimeUTC.ToString("yyyy-MM-ddTHH:mm:ssZ")}");
             }
         }
 

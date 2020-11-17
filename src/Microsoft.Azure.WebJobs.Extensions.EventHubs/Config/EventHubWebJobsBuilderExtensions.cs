@@ -46,7 +46,7 @@ namespace Microsoft.Extensions.Hosting
             return builder;
         }
 
-        public static void ConfigureOptions(EventHubOptions options)
+        internal static void ConfigureOptions(EventHubOptions options)
         {
             string offsetType = options?.InitialOffsetOptions?.Type?.ToLower() ?? String.Empty;
             if (!offsetType.Equals(String.Empty))
@@ -60,8 +60,17 @@ namespace Microsoft.Extensions.Hosting
                         options.EventProcessorOptions.InitialOffsetProvider = (s) => { return EventPosition.FromEnd(); };
                         break;
                     case "fromenqueuedtime":
-                        DateTime enqueuedTimeUTC = DateTime.Parse(options.InitialOffsetOptions.EnqueuedTimeUTC).ToUniversalTime();
-                        options.EventProcessorOptions.InitialOffsetProvider = (s) => { return EventPosition.FromEnqueuedTime(enqueuedTimeUTC); };
+                        try
+                        {
+                            DateTime enqueuedTimeUTC = DateTime.Parse(options.InitialOffsetOptions.EnqueuedTimeUTC).ToUniversalTime();
+                            options.EventProcessorOptions.InitialOffsetProvider = (s) => { return EventPosition.FromEnqueuedTime(enqueuedTimeUTC); };
+                        }
+                        catch (System.FormatException fe)
+                        {
+                            string message = $"{nameof(EventHubOptions)}:{nameof(InitialOffsetOptions)}:{nameof(InitialOffsetOptions.EnqueuedTimeUTC)} is configured with an invalid format. " +
+                                "Please use a format supported by DateTime.Parse().  e.g. 'yyyy-MM-ddTHH:mm:ssZ'";
+                            throw new InvalidOperationException(message, fe);
+                        }
                         break;
                     default:
                         throw new InvalidOperationException("An unsupported value was supplied for initialOffsetOptions.type");
