@@ -27,6 +27,9 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
         private readonly ILoggerFactory _loggerFactory;
         private readonly TestLoggerProvider _loggerProvider;
         private readonly string _template = " An exception of type '{0}' was thrown. This exception type is typically a result of Event Hub processor rebalancing or a transient error and can be safely ignored.";
+        private readonly string _optionStringInitialOffsetType = "FromEnqueuedTime";
+        private readonly string _optionStringInitialOffsetQneueuedTimeUTC = "2020-09-13T12:00Z";
+
         public EventHubConfigurationTests()
         {
             _loggerFactory = new LoggerFactory();
@@ -48,6 +51,8 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
             Assert.Equal(5, options.BatchCheckpointFrequency);
             Assert.Equal(31, options.PartitionManagerOptions.LeaseDuration.TotalSeconds);
             Assert.Equal(21, options.PartitionManagerOptions.RenewInterval.TotalSeconds);
+            Assert.Equal(_optionStringInitialOffsetType, options.InitialOffsetOptions.Type);
+            Assert.Equal(_optionStringInitialOffsetQneueuedTimeUTC, options.InitialOffsetOptions.EnqueuedTimeUTC);
         }
 
         [Fact]
@@ -67,6 +72,8 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
             Assert.Equal(result.EventProcessorOptions.ReceiveTimeout, TimeSpan.FromSeconds(33));
             Assert.Equal(result.PartitionManagerOptions.LeaseDuration, TimeSpan.FromSeconds(31));
             Assert.Equal(result.PartitionManagerOptions.RenewInterval, TimeSpan.FromSeconds(21));
+            Assert.Equal(_optionStringInitialOffsetType, options.InitialOffsetOptions.Type);
+            Assert.Equal(_optionStringInitialOffsetQneueuedTimeUTC, options.InitialOffsetOptions.EnqueuedTimeUTC);
         }
 
         private EventHubOptions CreateOptions()
@@ -81,7 +88,9 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
                 { $"{extensionPath}:EventProcessorOptions:InvokeProcessorAfterReceiveTimeout", "true" },
                 { $"{extensionPath}:BatchCheckpointFrequency", "5" },
                 { $"{extensionPath}:PartitionManagerOptions:LeaseDuration", "00:00:31" },
-                { $"{extensionPath}:PartitionManagerOptions:RenewInterval", "00:00:21" }
+                { $"{extensionPath}:PartitionManagerOptions:RenewInterval", "00:00:21" },
+                { $"{extensionPath}:InitialOffsetOptions:Type", _optionStringInitialOffsetType },
+                { $"{extensionPath}:InitialOffsetOptions:EnqueuedTimeUTC", _optionStringInitialOffsetQneueuedTimeUTC }
             };
 
             return TestHelpers.GetConfiguredOptions<EventHubOptions>(b =>

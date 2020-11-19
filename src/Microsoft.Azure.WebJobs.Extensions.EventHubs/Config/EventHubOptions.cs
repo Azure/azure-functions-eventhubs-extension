@@ -38,6 +38,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs
         {
             EventProcessorOptions = EventProcessorOptions.DefaultOptions;
             PartitionManagerOptions = new PartitionManagerOptions();
+            InitialOffsetOptions = new InitialOffsetOptions();
         }
 
         /// <summary>
@@ -59,6 +60,8 @@ namespace Microsoft.Azure.WebJobs.EventHubs
                 _batchCheckpointFrequency = value;
             }
         }
+
+        public InitialOffsetOptions InitialOffsetOptions { get; set; }
 
         public EventProcessorOptions EventProcessorOptions { get; }
 
@@ -390,11 +393,22 @@ namespace Microsoft.Azure.WebJobs.EventHubs
                 };
             }
 
+            JObject initialOffsetOptions = null;
+            if (InitialOffsetOptions != null)
+            {
+                initialOffsetOptions = new JObject
+                {
+                    { nameof(InitialOffsetOptions.Type), InitialOffsetOptions.Type },
+                    { nameof(InitialOffsetOptions.EnqueuedTimeUTC), InitialOffsetOptions.EnqueuedTimeUTC },
+                };
+            }
+
             JObject options = new JObject
             {
                 { nameof(BatchCheckpointFrequency), BatchCheckpointFrequency },
                 { nameof(EventProcessorOptions), eventProcessorOptions },
-                { nameof(PartitionManagerOptions), partitionManagerOptions }
+                { nameof(PartitionManagerOptions), partitionManagerOptions },
+                { nameof(InitialOffsetOptions), initialOffsetOptions }
             };
 
             return options.ToString(Formatting.Indented);

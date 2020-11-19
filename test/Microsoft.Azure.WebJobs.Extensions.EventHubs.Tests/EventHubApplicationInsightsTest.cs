@@ -216,7 +216,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 expectedLinks[i] = new TestLink
                 {
                     operation_Id = operationId,
-                    id = $"|{operationId}.{spanId}."
+                    id = $"{spanId}"
                 };
 
                 messages[i] = new EventData(Encoding.UTF8.GetBytes(_testPrefix + i))
@@ -388,7 +388,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             string parentId,
             string category)
         {
-            Assert.Equal($"{endpoint} | {entityName}", dependency.Target);
+            Assert.Equal($"{endpoint}{entityName}", dependency.Target);
             Assert.Equal("Azure Event Hubs", dependency.Type);
             Assert.Equal(name, dependency.Name);
             Assert.True(dependency.Success);
