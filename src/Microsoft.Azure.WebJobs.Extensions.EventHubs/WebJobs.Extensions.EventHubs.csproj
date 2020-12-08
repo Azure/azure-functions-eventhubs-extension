@@ -6,14 +6,15 @@
     <RootNamespace>Microsoft.Azure.WebJobs.EventHubs</RootNamespace>
     <PackageId>Microsoft.Azure.WebJobs.Extensions.EventHubs</PackageId>
     <Description>Microsoft Azure WebJobs SDK EventHubs Extension</Description>
-    <Version>4.1.1</Version>
+    <Version>4.2.0</Version>
     <CommitHash Condition="$(CommitHash) == ''">N/A</CommitHash>
     <InformationalVersion>$(Version) Commit hash: $(CommitHash)</InformationalVersion>
     <Authors>Microsoft</Authors>
     <Company>Microsoft</Company>
     <Copyright>© Microsoft Corporation. All rights reserved.</Copyright>
-    <PackageLicenseUrl>https://go.microsoft.com/fwlink/?linkid=2028464</PackageLicenseUrl>
-    <PackageIconUrl>https://raw.githubusercontent.com/Azure/azure-webjobs-sdk/dev/webjobs.png</PackageIconUrl>
+    <PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <Icon>webjobs.png</Icon>
     <PackageProjectUrl>http://go.microsoft.com/fwlink/?LinkID=320972</PackageProjectUrl>
     <RepositoryType>git</RepositoryType>
     <RepositoryUrl>https://github.com/Azure/azure-functions-servicebus-extension</RepositoryUrl>
@@ -38,7 +39,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Azure.EventHubs.Processor" Version="3.0.0" />
-    <PackageReference Include="Microsoft.Azure.WebJobs" Version="3.0.14" />
+    <PackageReference Include="Microsoft.Azure.WebJobs" Version="3.0.23" />
     <PackageReference Include="StyleCop.Analyzers" Version="1.1.0-beta004">
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>

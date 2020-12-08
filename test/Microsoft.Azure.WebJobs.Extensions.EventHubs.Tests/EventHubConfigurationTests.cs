@@ -15,8 +15,10 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Microsoft.WindowsAzure.Storage;
 using Newtonsoft.Json.Linq;
 using Xunit;
+using LogLevel = Microsoft.Extensions.Logging.LogLevel;
 
 namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
 {
@@ -24,6 +26,9 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
     {
         private readonly ILoggerFactory _loggerFactory;
         private readonly TestLoggerProvider _loggerProvider;
+        private readonly string _template = " An exception of type '{0}' was thrown. This exception type is typically a result of Event Hub processor rebalancing or a transient error and can be safely ignored.";
+        private readonly string _optionStringInitialOffsetType = "FromEnqueuedTime";
+        private readonly string _optionStringInitialOffsetQneueuedTimeUTC = "2020-09-13T12:00Z";
 
         public EventHubConfigurationTests()
         {
@@ -46,6 +51,8 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
             Assert.Equal(5, options.BatchCheckpointFrequency);
             Assert.Equal(31, options.PartitionManagerOptions.LeaseDuration.TotalSeconds);
             Assert.Equal(21, options.PartitionManagerOptions.RenewInterval.TotalSeconds);
+            Assert.Equal(_optionStringInitialOffsetType, options.InitialOffsetOptions.Type);
+            Assert.Equal(_optionStringInitialOffsetQneueuedTimeUTC, options.InitialOffsetOptions.EnqueuedTimeUTC);
         }
 
         [Fact]
@@ -65,6 +72,8 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
             Assert.Equal(result.EventProcessorOptions.ReceiveTimeout, TimeSpan.FromSeconds(33));
             Assert.Equal(result.PartitionManagerOptions.LeaseDuration, TimeSpan.FromSeconds(31));
             Assert.Equal(result.PartitionManagerOptions.RenewInterval, TimeSpan.FromSeconds(21));
+            Assert.Equal(_optionStringInitialOffsetType, options.InitialOffsetOptions.Type);
+            Assert.Equal(_optionStringInitialOffsetQneueuedTimeUTC, options.InitialOffsetOptions.EnqueuedTimeUTC);
         }
 
         private EventHubOptions CreateOptions()
@@ -79,7 +88,9 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
                 { $"{extensionPath}:EventProcessorOptions:InvokeProcessorAfterReceiveTimeout", "true" },
                 { $"{extensionPath}:BatchCheckpointFrequency", "5" },
                 { $"{extensionPath}:PartitionManagerOptions:LeaseDuration", "00:00:31" },
-                { $"{extensionPath}:PartitionManagerOptions:RenewInterval", "00:00:21" }
+                { $"{extensionPath}:PartitionManagerOptions:RenewInterval", "00:00:21" },
+                { $"{extensionPath}:InitialOffsetOptions:Type", _optionStringInitialOffsetType },
+                { $"{extensionPath}:InitialOffsetOptions:EnqueuedTimeUTC", _optionStringInitialOffsetQneueuedTimeUTC }
             };
 
             return TestHelpers.GetConfiguredOptions<EventHubOptions>(b =>
@@ -118,7 +129,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
             var handler = (Action<ExceptionReceivedEventArgs>)eventProcessorOptions.GetType().GetField("exceptionHandler", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(eventProcessorOptions);
             handler.Method.Invoke(handler.Target, new object[] { args });
 
-            string expectedMessage = "EventProcessorHost error (Action=TestAction, HostName=TestHostName, PartitionId=TestPartitionId)";
+            string expectedMessage = "EventProcessorHost error (Action='TestAction', HostName='TestHostName', PartitionId='TestPartitionId').";
             var logMessage = host.GetTestLoggerProvider().GetAllLogMessages().Single();
             Assert.Equal(LogLevel.Error, logMessage.Level);
             Assert.Equal(expectedMessage, logMessage.FormattedMessage);
@@ -134,7 +145,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
             var e = (ExceptionReceivedEventArgs)ctor.Invoke(new object[] { "TestHostName", "TestPartitionId", ex, "TestAction" });
             EventHubExtensionConfigProvider.LogExceptionReceivedEvent(e, _loggerFactory);
 
-            string expectedMessage = "EventProcessorHost error (Action=TestAction, HostName=TestHostName, PartitionId=TestPartitionId)";
+            string expectedMessage = "EventProcessorHost error (Action='TestAction', HostName='TestHostName', PartitionId='TestPartitionId').";
             var logMessage = _loggerProvider.GetAllLogMessages().Single();
             Assert.Equal(LogLevel.Error, logMessage.Level);
             Assert.Same(ex, logMessage.Exception);
@@ -150,11 +161,11 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
             var e = (ExceptionReceivedEventArgs)ctor.Invoke(new object[] { "TestHostName", "TestPartitionId", ex, "TestAction" });
             EventHubExtensionConfigProvider.LogExceptionReceivedEvent(e, _loggerFactory);
 
-            string expectedMessage = "EventProcessorHost error (Action=TestAction, HostName=TestHostName, PartitionId=TestPartitionId)";
+            string expectedMessage = "EventProcessorHost error (Action='TestAction', HostName='TestHostName', PartitionId='TestPartitionId').";
             var logMessage = _loggerProvider.GetAllLogMessages().Single();
             Assert.Equal(LogLevel.Information, logMessage.Level);
             Assert.Same(ex, logMessage.Exception);
-            Assert.Equal(expectedMessage, logMessage.FormattedMessage);
+            Assert.Equal(expectedMessage + string.Format(_template, typeof(EventHubsException).Name), logMessage.FormattedMessage);
         }
 
         [Fact]
@@ -165,11 +176,11 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
             var e = (ExceptionReceivedEventArgs)ctor.Invoke(new object[] { "TestHostName", "TestPartitionId", ex, "TestAction" });
             EventHubExtensionConfigProvider.LogExceptionReceivedEvent(e, _loggerFactory);
 
-            string expectedMessage = "EventProcessorHost error (Action=TestAction, HostName=TestHostName, PartitionId=TestPartitionId)";
+            string expectedMessage = "EventProcessorHost error (Action='TestAction', HostName='TestHostName', PartitionId='TestPartitionId').";
             var logMessage = _loggerProvider.GetAllLogMessages().Single();
             Assert.Equal(LogLevel.Information, logMessage.Level);
             Assert.Same(ex, logMessage.Exception);
-            Assert.Equal(expectedMessage, logMessage.FormattedMessage);
+            Assert.Equal(expectedMessage + string.Format(_template, typeof(OperationCanceledException).Name), logMessage.FormattedMessage);
         }
 
         [Fact]
@@ -180,7 +191,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
             var e = (ExceptionReceivedEventArgs)ctor.Invoke(new object[] { "TestHostName", "TestPartitionId", ex, "TestAction" });
             EventHubExtensionConfigProvider.LogExceptionReceivedEvent(e, _loggerFactory);
 
-            string expectedMessage = "EventProcessorHost error (Action=TestAction, HostName=TestHostName, PartitionId=TestPartitionId)";
+            string expectedMessage = "EventProcessorHost error (Action='TestAction', HostName='TestHostName', PartitionId='TestPartitionId').";
             var logMessage = _loggerProvider.GetAllLogMessages().Single();
             Assert.Equal(LogLevel.Error, logMessage.Level);
             Assert.Same(ex, logMessage.Exception);
@@ -196,11 +207,36 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
             var e = (ExceptionReceivedEventArgs)ctor.Invoke(new object[] { "TestHostName", "TestPartitionId", ex, "TestAction" });
             EventHubExtensionConfigProvider.LogExceptionReceivedEvent(e, _loggerFactory);
 
-            string expectedMessage = "EventProcessorHost error (Action=TestAction, HostName=TestHostName, PartitionId=TestPartitionId)";
+            string expectedMessage = "EventProcessorHost error (Action='TestAction', HostName='TestHostName', PartitionId='TestPartitionId').";
             var logMessage = _loggerProvider.GetAllLogMessages().Single();
             Assert.Equal(LogLevel.Information, logMessage.Level);
             Assert.Same(ex, logMessage.Exception);
-            Assert.Equal(expectedMessage, logMessage.FormattedMessage);
+            Assert.Equal(expectedMessage + string.Format(_template, typeof(ReceiverDisconnectedException).Name), logMessage.FormattedMessage);
+        }
+
+        [Fact]
+        public void LogExceptionReceivedEvent_AggregateExceptions_LoggedAsInfo()
+        {
+            var ctor = typeof(AggregateException).GetConstructor(BindingFlags.Public | BindingFlags.Instance, null, new Type[] { typeof(IEnumerable<Exception>) }, null);
+            var request = new RequestResult()
+            {
+                HttpStatusCode = 409
+            };
+            var information = new StorageExtendedErrorInformation();
+            typeof(StorageExtendedErrorInformation).GetProperty("ErrorCode").SetValue(information, "LeaseIdMismatchWithLeaseOperation");
+            typeof(RequestResult).GetProperty("ExtendedErrorInformation").SetValue(request, information);
+            var storageException = new StorageException(request, "The lease ID specified did not match the lease ID for the blob.", null);
+
+            var ex = (AggregateException)ctor.Invoke(new object[] { new Exception[] { storageException } });
+            ctor = typeof(ExceptionReceivedEventArgs).GetConstructors(BindingFlags.NonPublic | BindingFlags.Instance).Single();
+            var e = (ExceptionReceivedEventArgs)ctor.Invoke(new object[] { "TestHostName", "TestPartitionId", ex, "TestAction" });
+            EventHubExtensionConfigProvider.LogExceptionReceivedEvent(e, _loggerFactory);
+
+            string expectedMessage = "EventProcessorHost error (Action='TestAction', HostName='TestHostName', PartitionId='TestPartitionId').";
+            var logMessage = _loggerProvider.GetAllLogMessages().Single();
+            Assert.Equal(LogLevel.Information, logMessage.Level);
+            Assert.Same(storageException, logMessage.Exception);
+            Assert.Equal(expectedMessage + string.Format(_template, typeof(WindowsAzure.Storage.StorageException).Name), logMessage.FormattedMessage);
         }
     }
 }

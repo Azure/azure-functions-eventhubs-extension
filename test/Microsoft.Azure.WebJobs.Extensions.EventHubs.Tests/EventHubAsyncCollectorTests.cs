@@ -20,7 +20,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
         [Fact]
         public void NullArgumentCheck()
         {
-            Assert.Throws<ArgumentNullException>(() => new EventHubAsyncCollector(null));
+            Assert.Throws<ArgumentNullException>(() => new EventHubAsyncCollector(null, null));
         }
 
         public EventData CreateEvent(byte[] body, string partitionKey)
@@ -95,8 +95,8 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
         {
             var collector = new TestEventHubAsyncCollector();
 
-            // Trip the 256k EventHub limit.
-            for (int i = 0; i < 10; i++)
+            // Trip the 1024k EventHub limit.
+            for (int i = 0; i < 50; i++)
             {
                 var e1 = new EventData(new byte[10 * 1024]);
                 await collector.AddAsync(e1);
@@ -106,7 +106,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
             Assert.Empty(collector.SentEvents);
 
             // This will push it over the theshold
-            for (int i = 0; i < 20; i++)
+            for (int i = 0; i < 60; i++)
             {
                 var e1 = new EventData(new byte[10 * 1024]);
                 await collector.AddAsync(e1);
@@ -120,8 +120,8 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
         {
             var collector = new TestEventHubAsyncCollector();
 
-            // event hub max is 256k payload.
-            var hugePayload = new byte[300 * 1024];
+            // event hub max is 1024k payload.
+            var hugePayload = new byte[1200 * 1024];
             var e1 = new EventData(hugePayload);
 
             try
@@ -232,7 +232,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
             private const string FakeConnectionString = "Endpoint=sb://test89123-ns-x.servicebus.windows.net/;SharedAccessKeyName=ReceiveRule;SharedAccessKey=secretkey;EntityPath=path2";
 
             public TestEventHubAsyncCollector()
-                : base(TestClient)
+                : base(TestClient, null)
             {
             }
 

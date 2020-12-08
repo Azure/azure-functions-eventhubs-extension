@@ -152,7 +152,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
 
             await eventProcessor.ProcessErrorAsync(partitionContext, ex);
             var msg = testLogger.GetLogMessages().Single();
-            Assert.Equal("Error processing event from Partition Id: '123', Owner: 'def', EventHubPath: 'abc'", msg.FormattedMessage);
+            Assert.Equal("Processing error (Partition Id: '123', Owner: 'def', EventHubPath: 'abc').", msg.FormattedMessage);
             Assert.IsType<InvalidOperationException>(msg.Exception);
             Assert.Equal(LogLevel.Error, msg.Level);
         }
@@ -174,8 +174,8 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
 
             await eventProcessor.ProcessErrorAsync(partitionContext, disconnectedEx);
             var msg = testLogger.GetLogMessages().Single();
-            Assert.Equal("An Event Hub exception of type 'ReceiverDisconnectedException' was thrown from Partition Id: '123', Owner: 'def', EventHubPath: 'abc'. This exception type is typically a result of Event Hub processor rebalancing and can be safely ignored.", msg.FormattedMessage);
-            Assert.Null(msg.Exception);
+            Assert.Equal("Processing error (Partition Id: '123', Owner: 'def', EventHubPath: 'abc'). An exception of type 'ReceiverDisconnectedException' was thrown. This exception type is typically a result of Event Hub processor rebalancing or a transient error and can be safely ignored.", msg.FormattedMessage);
+            Assert.NotNull(msg.Exception);
             Assert.Equal(LogLevel.Information, msg.Level);
 
             testLogger.ClearLogMessages();
@@ -187,8 +187,8 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
 
             await eventProcessor.ProcessErrorAsync(partitionContext, leaseLostEx);
             msg = testLogger.GetLogMessages().Single();
-            Assert.Equal("An Event Hub exception of type 'LeaseLostException' was thrown from Partition Id: '123', Owner: 'def', EventHubPath: 'abc'. This exception type is typically a result of Event Hub processor rebalancing and can be safely ignored.", msg.FormattedMessage);
-            Assert.Null(msg.Exception);
+            Assert.Equal("Processing error (Partition Id: '123', Owner: 'def', EventHubPath: 'abc'). An exception of type 'LeaseLostException' was thrown. This exception type is typically a result of Event Hub processor rebalancing or a transient error and can be safely ignored.", msg.FormattedMessage);
+            Assert.NotNull(msg.Exception);
             Assert.Equal(LogLevel.Information, msg.Level);
         }
 

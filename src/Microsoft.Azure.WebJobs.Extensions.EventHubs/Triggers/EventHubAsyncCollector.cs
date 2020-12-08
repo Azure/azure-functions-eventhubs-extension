@@ -7,13 +7,15 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Azure.EventHubs;
+using Microsoft.Azure.WebJobs.Logging;
+using Microsoft.Extensions.Logging;
 
 namespace Microsoft.Azure.WebJobs.EventHubs
 {
     /// <summary>
     /// Core object to send events to EventHub. 
     /// Any user parameter that sends EventHub events will eventually get bound to this object. 
-    /// This will queue events and send in batches, also keeping under the 256kb event hub limit per batch. 
+    /// This will queue events and send in batches, also keeping under the 1024kb event hub limit per batch. 
     /// </summary>
     internal class EventHubAsyncCollector : IAsyncCollector<EventData>
     {
@@ -23,20 +25,23 @@ namespace Microsoft.Azure.WebJobs.EventHubs
               
         private const int BatchSize = 100;
 
-        // Suggested to use 240k instead of 256k to leave padding room for headers.
-        private const int MaxByteSize = 240 * 1024; 
-        
+        // Suggested to use 1008k instead of 1024k to leave padding room for headers.
+        private const int MaxByteSize = 1008 * 1024;
+
+        private readonly ILogger _logger;
+
         /// <summary>
         /// Create a sender around the given client. 
         /// </summary>
         /// <param name="client"></param>
-        public EventHubAsyncCollector(EventHubClient client)
+        public EventHubAsyncCollector(EventHubClient client, ILoggerFactory loggerFactory)
         {
             if (client == null)
             {
                 throw new ArgumentNullException("client");
             }
             _client = client;
+            _logger = loggerFactory?.CreateLogger(LogCategories.Executor);
         }
 
         /// <summary>
@@ -96,6 +101,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs
         /// <param name="batch">the set of events to send</param>
         protected virtual async Task SendBatchAsync(IEnumerable<EventData> batch)
         {
+            _logger?.LogDebug("Sending events to EventHub");
             await _client.SendAsync(batch);
         }
 

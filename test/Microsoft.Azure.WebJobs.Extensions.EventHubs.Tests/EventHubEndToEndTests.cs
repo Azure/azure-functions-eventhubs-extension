@@ -8,29 +8,50 @@ using System.Reflection;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.WindowsAzure.Storage;
+using Microsoft.WindowsAzure.Storage.Blob;
 using Microsoft.Azure.EventHubs;
 using Microsoft.Azure.WebJobs.Host.TestCommon;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Newtonsoft.Json.Linq;
+using Microsoft.Azure.WebJobs.EventHubs;
 using Xunit;
+// Disambiguage between Microsoft.WindowsAzure.Storage.LogLevel
+using LogLevel = Microsoft.Extensions.Logging.LogLevel;
 
 namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 {
     public class EventHubEndToEndTests
     {
         private const string TestHubName = "webjobstesthub";
+        private const string TestHubConnectionName = "AzureWebJobsTestHubConnection";
+        private const string StorageConnectionName = "AzureWebJobsStorage";
+        // The container name created by this extension to save snapshots of the Event Hubs stream positions
+        private const string SnapshotStorageContainerName = "azure-webjobs-eventhub";
         private const int Timeout = 30000;
+
         private static EventWaitHandle _eventWait;
         private static string _testId;
         private static List<string> _results;
+        private static string _testHubConnectionString;
+        private static string _storageConnectionString;
+        private static DateTime _initialOffsetEnqueuedTimeUTC;
+        private static DateTime? _earliestReceivedMessageEnqueuedTimeUTC = null;
 
         public EventHubEndToEndTests()
         {
             _results = new List<string>();
             _testId = Guid.NewGuid().ToString();
             _eventWait = new ManualResetEvent(initialState: false);
+
+            var config = new ConfigurationBuilder()
+                .AddEnvironmentVariables()
+                .AddTestSettings()
+                .Build();
+
+            _testHubConnectionString = config.GetConnectionStringOrSetting(TestHubConnectionName);
+            _storageConnectionString = config.GetConnectionStringOrSetting(StorageConnectionName);
         }
 
         [Fact]
@@ -96,6 +117,9 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 
                 Assert.True(logMessages.Where(x => !string.IsNullOrEmpty(x.FormattedMessage)
                     && x.FormattedMessage.Contains("CheckpointAsync")).Count() > 0);
+
+                Assert.True(logMessages.Where(x => !string.IsNullOrEmpty(x.FormattedMessage)
+                    && x.FormattedMessage.Contains("Sending events to EventHub")).Count() > 0);
             }
         }
 
@@ -129,6 +153,9 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 
                 Assert.True(logMessages.Where(x => !string.IsNullOrEmpty(x.FormattedMessage)
                     && x.FormattedMessage.Contains("CheckpointAsync")).Count() > 0);
+
+                Assert.True(logMessages.Where(x => !string.IsNullOrEmpty(x.FormattedMessage)
+                    && x.FormattedMessage.Contains("Sending events to EventHub")).Count() > 0);
             }
         }
 
@@ -148,6 +175,59 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             }
         }
 
+        [Fact]
+        public async Task EventHub_InitialOffsetFromEnd()
+        {
+            // Send a message to ensure the stream is not empty as we are trying to validate that no messages are delivered in this case
+            using (var host = BuildHost<EventHubTestSendOnlyJobs>().Item1)
+            {
+                var method = typeof(EventHubTestSendOnlyJobs).GetMethod(nameof(EventHubTestSendOnlyJobs.SendEvent_TestHub), BindingFlags.Static | BindingFlags.Public);
+                await host.CallAsync(method, new { input = _testId });
+            }
+            // Clear out existing checkpoints as the InitialOffset config only applies when checkpoints don't exist (first run on a host)
+            await DeleteStorageCheckpoints();
+            var initialOffsetOptions = new InitialOffsetOptions()
+            {
+                Type = "FromEnd"
+            };
+            using (var host = BuildHost<EventHubTestInitialOffsetFromEndJobs>(initialOffsetOptions).Item1)
+            {
+                // We don't expect to get signalled as there will be messages recieved with a FromEnd initial offset
+                bool result = _eventWait.WaitOne(Timeout);
+                Assert.False(result, "An event was received while none were expected.");
+            }
+        }
+
+        [Fact]
+        public async Task EventHub_InitialOffsetFromEnqueuedTime()
+        {
+            // Mark the time now and send a message which should be the only one that is picked up when we run the actual test host
+            _initialOffsetEnqueuedTimeUTC = DateTime.UtcNow;
+            using (var host = BuildHost<EventHubTestSendOnlyJobs>().Item1)
+            {
+                var method = typeof(EventHubTestSendOnlyJobs).GetMethod(nameof(EventHubTestSendOnlyJobs.SendEvent_TestHub), BindingFlags.Static | BindingFlags.Public);
+                await host.CallAsync(method, new { input = _testId });
+            }
+            // Clear out existing checkpoints as the InitialOffset config only applies when checkpoints don't exist (first run on a host)
+            await DeleteStorageCheckpoints();
+            _earliestReceivedMessageEnqueuedTimeUTC = null;
+            var initialOffsetOptions = new InitialOffsetOptions()
+            {
+                Type = "FromEnqueuedTime",
+                EnqueuedTimeUTC = _initialOffsetEnqueuedTimeUTC.ToString("yyyy-MM-ddTHH:mm:ssZ")
+            };
+            using (var host = BuildHost<EventHubTestInitialOffsetFromEnqueuedTimeJobs>(initialOffsetOptions).Item1)
+            {
+                // Validation that we only got messages after the configured FromEnqueuedTime is done in the JobHost
+                bool result = _eventWait.WaitOne(Timeout);
+                Assert.True(result, $"No event was received within the timeout period of {Timeout}. " +
+                    $"Expected event sent shortly after {_initialOffsetEnqueuedTimeUTC.ToString("yyyy-MM-ddTHH:mm:ssZ")} with content {_testId}");
+                Assert.True(_earliestReceivedMessageEnqueuedTimeUTC > _initialOffsetEnqueuedTimeUTC, 
+                    "A message was received that was enqueued before the configured Initial Offset Enqueued Time. " + 
+                    $"Received message enqueued time: {_earliestReceivedMessageEnqueuedTimeUTC?.ToString("yyyy-MM-ddTHH:mm:ssZ")}" + 
+                    $", initial offset enqueued time: {_initialOffsetEnqueuedTimeUTC.ToString("yyyy-MM-ddTHH:mm:ssZ")}");
+            }
+        }
 
         public class EventHubTestSingleDispatchJobs
         {
@@ -170,6 +250,38 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                     Assert.Equal("value1", properties["TestProp1"]);
                     Assert.Equal("value2", properties["TestProp2"]);
 
+                    _eventWait.Set();
+                }
+            }
+        }
+
+        public class EventHubTestSendOnlyJobs
+        {
+            public static void SendEvent_TestHub(string input, [EventHub(TestHubName)] out EventData evt)
+            {
+                evt = new EventData(Encoding.UTF8.GetBytes(input));
+            }
+        }
+
+        public class EventHubTestInitialOffsetFromEndJobs
+        {
+            public static void ProcessSingleEvent([EventHubTrigger(TestHubName)] string evt,
+                       string partitionKey, DateTime enqueuedTimeUtc, IDictionary<string, object> properties,
+                       IDictionary<string, object> systemProperties)
+            {
+                _eventWait.Set();
+            }
+        }
+
+        public class EventHubTestInitialOffsetFromEnqueuedTimeJobs
+        {
+            public static void ProcessSingleEvent([EventHubTrigger(TestHubName)] string evt,
+                       string partitionKey, DateTime enqueuedTimeUtc, IDictionary<string, object> properties,
+                       IDictionary<string, object> systemProperties)
+            {
+                if (_earliestReceivedMessageEnqueuedTimeUTC == null)
+                {
+                    _earliestReceivedMessageEnqueuedTimeUTC = enqueuedTimeUtc;
                     _eventWait.Set();
                 }
             }
@@ -290,18 +402,11 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             }
         }
 
-        private Tuple<JobHost, IHost> BuildHost<T>()
+        private Tuple<JobHost, IHost> BuildHost<T>(InitialOffsetOptions initialOffsetOptions = null)
         {
             JobHost jobHost = null;
 
-            var config = new ConfigurationBuilder()
-                .AddEnvironmentVariables()
-                .AddTestSettings()
-                .Build();
-
-            const string connectionName = "AzureWebJobsTestHubConnection";
-            string connection = config.GetConnectionStringOrSetting(connectionName);
-            Assert.True(!string.IsNullOrEmpty(connection), $"Required test connection string '{connectionName}' is missing.");
+            Assert.True(!string.IsNullOrEmpty(_testHubConnectionString), $"Required test connection string '{TestHubConnectionName}' is missing.");
 
             IHost host = new HostBuilder()
                 .ConfigureDefaultTestHost<T>(b =>
@@ -309,8 +414,14 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                     b.AddEventHubs(options =>
                     {
                         options.EventProcessorOptions.EnableReceiverRuntimeMetric = true;
-                        options.AddSender(TestHubName, connection);
-                        options.AddReceiver(TestHubName, connection);
+                        if (initialOffsetOptions != null)
+                        {
+                            options.InitialOffsetOptions = initialOffsetOptions;
+                        }
+                        // We want to validate the default options configuration logic for setting initial offset and not implemente it here
+                        EventHubWebJobsBuilderExtensions.ConfigureOptions(options);
+                        options.AddSender(TestHubName, _testHubConnectionString);
+                        options.AddReceiver(TestHubName, _testHubConnectionString);
                     });
                 })
                 .ConfigureLogging(b =>
@@ -324,6 +435,33 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 
             return new Tuple<JobHost, IHost>(jobHost, host);
         }
+
+        // Deletes all checkpoints that were saved in storage so InitialOffset can be validated
+        private async Task DeleteStorageCheckpoints()
+        {
+            CloudStorageAccount cloudStorageAccount = CloudStorageAccount.Parse(_storageConnectionString);
+            CloudBlobClient blobClient = cloudStorageAccount.CreateCloudBlobClient();
+            var container = blobClient.GetContainerReference(SnapshotStorageContainerName);
+            BlobContinuationToken continuationToken = null;
+            do
+            {
+                var response = await container.ListBlobsSegmentedAsync(string.Empty, true, BlobListingDetails.None, null, continuationToken, null, null);
+                continuationToken = response.ContinuationToken;
+                foreach (var blob in response.Results.OfType<CloudBlob>())
+                {
+                    try
+                    {
+                        await blob.BreakLeaseAsync(TimeSpan.Zero);
+                    }
+                    catch (StorageException) 
+                    { 
+                        // Ignore as this will be thrown if the blob has no lease on it
+                    }
+                    await blob.DeleteAsync();
+                }
+            } while (continuationToken != null);
+        }
+
         public class TestPoco
         {
             public string Name { get; set; }

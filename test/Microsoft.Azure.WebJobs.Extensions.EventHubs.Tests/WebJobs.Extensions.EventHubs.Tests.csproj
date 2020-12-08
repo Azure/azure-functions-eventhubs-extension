@@ -26,8 +26,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Azure.WebJobs.Host.TestCommon" Version="3.0.14" />
-    <PackageReference Include="Microsoft.Azure.WebJobs.Logging.ApplicationInsights" Version="3.0.14" />
+    <PackageReference Include="Microsoft.Azure.WebJobs.Host.TestCommon" Version="3.0.19" />
+    <PackageReference Include="Microsoft.Azure.WebJobs.Logging.ApplicationInsights" Version="3.0.18" />
     <PackageReference Include="StyleCop.Analyzers" Version="1.1.0-beta004">
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
