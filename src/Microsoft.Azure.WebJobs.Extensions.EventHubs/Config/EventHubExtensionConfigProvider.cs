@@ -15,6 +15,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace Microsoft.Azure.WebJobs.EventHubs
 {
@@ -127,14 +128,68 @@ namespace Microsoft.Azure.WebJobs.EventHubs
         private static string ConvertEventData2String(EventData x)
             => Encoding.UTF8.GetString(ConvertEventData2Bytes(x));
 
-        private static EventData ConvertBytes2EventData(byte[] input)
-            => new EventData(input);
+        // Default ConvertBytes2EventData convertor was replaced with custom one to add ability to send partitionKey using OOP languages
+        // private static EventData ConvertBytes2EventData(byte[] input)
+        //     => new EventData(input);
 
         private static byte[] ConvertEventData2Bytes(EventData input)
             => input.Body.Array;
 
         private static EventData ConvertString2EventData(string input)
             => ConvertBytes2EventData(Encoding.UTF8.GetBytes(input));
+
+        private static EventData ConvertBytes2EventData(byte[] bytes)
+        {
+            string input = Encoding.UTF8.GetString(bytes);
+
+            if (IsJsonObject(input))
+            {
+                try
+                {
+                    // attempt to parse as an EventDataEx
+                    JObject o = JObject.Parse(input);
+                    var partitionKey = (string)o.GetValue("PartitionKey", StringComparison.OrdinalIgnoreCase)?.Value<string>();
+
+
+                    if (!string.IsNullOrEmpty(partitionKey))
+                    {
+                        byte[] body;
+                        JToken jToken = o.GetValue("Body", StringComparison.OrdinalIgnoreCase);
+                        if (jToken is JObject)
+                        {
+                            body = Encoding.UTF8.GetBytes(o.GetValue("Body", StringComparison.OrdinalIgnoreCase).ToObject<JObject>().ToString());
+                        }
+                        else
+                        {
+                            body = o.GetValue("Body", StringComparison.OrdinalIgnoreCase)?.ToObject<byte[]>();
+                        }
+
+                        return new EventDataEx(body)
+                        {
+                            PartitionKey = partitionKey
+                        };
+                    }
+                }
+                catch
+                {
+                    // best effort
+                }
+            }
+
+            // return default EventData
+            return new EventData(bytes);
+        }
+
+        private static bool IsJsonObject(string input)
+        {
+            if (string.IsNullOrEmpty(input))
+            {
+                return false;
+            }
+
+            input = input.Trim();
+            return (input.StartsWith("{", StringComparison.OrdinalIgnoreCase) && input.EndsWith("}", StringComparison.OrdinalIgnoreCase));
+        }
 
         private static Task<object> ConvertPocoToEventData(object arg, Attribute attrResolved, ValueBindingContext context)
         {

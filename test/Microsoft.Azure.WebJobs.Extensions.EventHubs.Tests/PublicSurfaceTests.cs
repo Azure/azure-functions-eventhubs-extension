@@ -20,7 +20,8 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests
                 "EventHubOptions",
                 "InitialOffsetOptions",
                 "EventHubWebJobsBuilderExtensions",
-                "EventHubsWebJobsStartup"
+                "EventHubsWebJobsStartup",
+                "EventDataEx"
             };
 
             TestHelpers.AssertPublicTypes(expected, assembly);
