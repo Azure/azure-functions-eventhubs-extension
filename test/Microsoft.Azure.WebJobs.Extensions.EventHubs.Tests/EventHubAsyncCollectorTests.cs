@@ -25,11 +25,10 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
 
         public EventData CreateEvent(byte[] body, string partitionKey)
         {
-            var data = new EventData(body);
-            IDictionary<string, object> sysProps = TestHelpers.New<SystemPropertiesCollection>();
-            sysProps["x-opt-partition-key"] = partitionKey;
-            TestHelpers.SetField(data, "SystemProperties", sysProps);
-            return data;
+            return new EventDataEx(body)
+            {
+                PartitionKey = partitionKey
+            };
         }
 
         [Fact]
@@ -37,7 +36,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
         {
             var collector = new TestEventHubAsyncCollector();
 
-            await collector.AddAsync(this.CreateEvent(new byte[] { 1 }, "pk1"));
+            await collector.AddAsync(CreateEvent(new byte[] { 1 }, "pk1"));
             await collector.AddAsync(CreateEvent(new byte[] { 2 }, "pk2"));
 
             // Not physically sent yet since we haven't flushed
@@ -242,13 +241,16 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
 
             public List<byte[]> SentEvents { get => sentEvents; set => sentEvents = value; }
 
-            protected override Task SendBatchAsync(IEnumerable<EventData> batch)
+            protected override Task SendBatchAsync(string partitionKey, IEnumerable<EventData> batch)
             {
                 // Assert they all have the same partition key (could be null)
-                var partitionKey = batch.First().SystemProperties?.PartitionKey;
                 foreach (var e in batch)
                 {
-                    Assert.Equal(partitionKey, e.SystemProperties?.PartitionKey);
+                    var eventDataEx = e as EventDataEx;
+                    if (eventDataEx != null)
+                    {
+                        Assert.Equal(partitionKey, eventDataEx.PartitionKey);
+                    }
                 }
 
                 lock (SentEvents)
