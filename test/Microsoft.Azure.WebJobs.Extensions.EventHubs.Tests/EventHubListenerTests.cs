@@ -14,7 +14,7 @@ using Microsoft.Azure.WebJobs.Host.Executors;
 using Microsoft.Azure.WebJobs.Host.Scale;
 using Microsoft.Azure.WebJobs.Host.TestCommon;
 using Microsoft.Extensions.Logging;
-using Microsoft.WindowsAzure.Storage.Blob;
+using Microsoft.Azure.Storage.Blob;
 using Moq;
 using Xunit;
 
@@ -182,7 +182,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
 
             // ctor is private
             constructor = typeof(LeaseLostException)
-                .GetConstructor(BindingFlags.NonPublic | BindingFlags.Instance, null, new Type[] { typeof(string), typeof(Exception) }, null);
+                .GetConstructor(BindingFlags.Public | BindingFlags.Instance, null, new Type[] { typeof(string), typeof(Exception) }, null);
             LeaseLostException leaseLostEx = (LeaseLostException)constructor.Invoke(new object[] { "My LeaseLostException!", new Exception() });
 
             await eventProcessor.ProcessErrorAsync(partitionContext, leaseLostEx);

@@ -7,6 +7,7 @@ using System.Linq;
 using System.Reflection;
 using Microsoft.Azure.EventHubs;
 using Microsoft.Azure.EventHubs.Processor;
+using Microsoft.Azure.Storage;
 using Microsoft.Azure.WebJobs.Host;
 using Microsoft.Azure.WebJobs.Host.TestCommon;
 using Microsoft.Azure.WebJobs.Host.Triggers;
@@ -15,7 +16,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Microsoft.WindowsAzure.Storage;
 using Newtonsoft.Json.Linq;
 using Xunit;
 using LogLevel = Microsoft.Extensions.Logging.LogLevel;
@@ -236,7 +236,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
             var logMessage = _loggerProvider.GetAllLogMessages().Single();
             Assert.Equal(LogLevel.Information, logMessage.Level);
             Assert.Same(storageException, logMessage.Exception);
-            Assert.Equal(expectedMessage + string.Format(_template, typeof(WindowsAzure.Storage.StorageException).Name), logMessage.FormattedMessage);
+            Assert.Equal(expectedMessage + string.Format(_template, typeof(StorageException).Name), logMessage.FormattedMessage);
         }
     }
 }

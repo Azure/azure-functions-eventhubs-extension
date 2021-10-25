@@ -266,7 +266,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
             string consumerGroupName = null, string owner = null)
         {
             var constructor = typeof(PartitionContext).GetConstructor(
-                BindingFlags.NonPublic | BindingFlags.Instance,
+                BindingFlags.Public | BindingFlags.Instance,
                 null,
                 new Type[] { typeof(EventProcessorHost), typeof(string), typeof(string), typeof(string), typeof(CancellationToken) },
                 null);
