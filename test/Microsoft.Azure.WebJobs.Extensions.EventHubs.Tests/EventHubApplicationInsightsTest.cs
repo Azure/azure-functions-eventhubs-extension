@@ -117,7 +117,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             Assert.False(ehTriggerRequest.Properties.ContainsKey("_MS.links"));
         }
 
-        [Fact]
+        [Fact(Skip = "Temporary skip the flaky test")]
         public async Task EventHub_MultipleDispatch_BatchSend()
         {
             using (var host = BuildHost<EventHubTestMultipleDispatchJobs>())
