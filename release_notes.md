@@ -2,6 +2,9 @@
 <!-- Please add your release notes in the following format:
 - My change description (#PR)
 -->
+#### Version 4.3.0
+-  Upgrading Microsoft.Azure.EventHubs.Processor to 4.3.2 [#98](https://github.com/Azure/azure-functions-eventhubs-extension/pull/98)
+
 #### Version 4.2.0
 -  User configurable initial offset support [#79](https://github.com/Azure/azure-functions-eventhubs-extension/pull/79)
 
