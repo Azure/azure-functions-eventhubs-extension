@@ -117,7 +117,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             Assert.False(ehTriggerRequest.Properties.ContainsKey("_MS.links"));
         }
 
-        [Fact]
+        [Fact(Skip = "Temporary skip the flaky test")]
         public async Task EventHub_MultipleDispatch_BatchSend()
         {
             using (var host = BuildHost<EventHubTestMultipleDispatchJobs>())
@@ -200,7 +200,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             Assert.Equal(allLinks.Count, allLinks.Count(l => l.id == ehOutDependency.Id));
         }
 
-        [Fact]
+        [Fact(Skip = "Temporary skip the flaky test")]
         public async Task EventHub_MultipleDispatch_IndependentMessages()
         {
             // send individual messages via EventHub client, process batch by host 
