@@ -34,7 +34,8 @@ namespace Microsoft.Azure.WebJobs.EventHubs
         private readonly bool _singleDispatch;
         private readonly EventHubOptions _options;
         private readonly ILogger _logger;
-        private bool _started;
+        private readonly SemaphoreSlim _stopSemaphoreSlim = new SemaphoreSlim(1, 1);
+        private bool _started;     
 
         private Lazy<EventHubsScaleMonitor> _scaleMonitor;
 
@@ -71,6 +72,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs
 
         void IDisposable.Dispose()
         {
+            StopAsync(CancellationToken.None).Wait();
         }
 
         public async Task StartAsync(CancellationToken cancellationToken)
@@ -81,11 +83,19 @@ namespace Microsoft.Azure.WebJobs.EventHubs
 
         public async Task StopAsync(CancellationToken cancellationToken)
         {
-            if (_started)
+            await _stopSemaphoreSlim.WaitAsync();
+            try
             {
-                await _eventProcessorHost.UnregisterEventProcessorAsync();
+                if (_started)
+                {
+                    await _eventProcessorHost.UnregisterEventProcessorAsync();
+                }
+                _started = false;
             }
-            _started = false;
+            finally
+            {
+                _stopSemaphoreSlim.Release();
+            }
         }
 
         IEventProcessor IEventProcessorFactory.CreateEventProcessor(PartitionContext context)
@@ -132,7 +142,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs
             {
                 // signal cancellation for any in progress executions 
                 _cts.Cancel();
-                
+
                 _logger.LogDebug(GetOperationDetails(context, $"CloseAsync, {reason.ToString()}"));
                 return Task.CompletedTask;
             }
