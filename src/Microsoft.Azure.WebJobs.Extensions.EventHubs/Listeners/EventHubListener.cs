@@ -34,6 +34,8 @@ namespace Microsoft.Azure.WebJobs.EventHubs
         private readonly bool _singleDispatch;
         private readonly EventHubOptions _options;
         private readonly ILogger _logger;
+        private readonly SemaphoreSlim _stopSemaphoreSlim = new SemaphoreSlim(1, 1);
+        private readonly string _details;
         private bool _started;
 
         private Lazy<EventHubsScaleMonitor> _scaleMonitor;
@@ -62,6 +64,8 @@ namespace Microsoft.Azure.WebJobs.EventHubs
             _options = options;
             _logger = logger;
             _scaleMonitor = new Lazy<EventHubsScaleMonitor>(() => new EventHubsScaleMonitor(_functionId, _eventHubName, _consumerGroup, _connectionString, _storageConnectionString, _logger, blobContainer));
+            _details = $"'namespace='{eventProcessorHost?.EndpointAddress}', eventHub='{eventProcessorHost?.EventHubPath}', " +
+                $"consumerGroup='{eventProcessorHost?.ConsumerGroupName}', functionId='{functionId}', singleDispatch='{singleDispatch}'";
         }
 
         void IListener.Cancel()
@@ -71,21 +75,37 @@ namespace Microsoft.Azure.WebJobs.EventHubs
 
         void IDisposable.Dispose()
         {
+            StopAsync(CancellationToken.None).Wait();
         }
 
         public async Task StartAsync(CancellationToken cancellationToken)
         {
             await _eventProcessorHost.RegisterEventProcessorFactoryAsync(this, _options.EventProcessorOptions);
             _started = true;
+
+            _logger.LogDebug($"EventHub listener started ({_details})");
         }
 
         public async Task StopAsync(CancellationToken cancellationToken)
         {
-            if (_started)
+            await _stopSemaphoreSlim.WaitAsync();
+            try
             {
-                await _eventProcessorHost.UnregisterEventProcessorAsync();
+                if (_started)
+                {
+                    await _eventProcessorHost.UnregisterEventProcessorAsync();
+                    _logger.LogDebug($"EventHub listener stopped ({_details})");
+                }
+                else
+                {
+                    _logger.LogDebug($"EventHub listener is already stopped ({_details})");
+                }
+                _started = false;
             }
-            _started = false;
+            finally
+            {
+                _stopSemaphoreSlim.Release();
+            }
         }
 
         IEventProcessor IEventProcessorFactory.CreateEventProcessor(PartitionContext context)
@@ -132,7 +152,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs
             {
                 // signal cancellation for any in progress executions 
                 _cts.Cancel();
-                
+
                 _logger.LogDebug(GetOperationDetails(context, $"CloseAsync, {reason.ToString()}"));
                 return Task.CompletedTask;
             }
