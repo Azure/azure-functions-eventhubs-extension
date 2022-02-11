@@ -199,7 +199,6 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
             var functionId = "FunctionId";
             var eventHubName = "EventHubName";
             var consumerGroup = "ConsumerGroup";
-            var storageUri = new Uri("https://eventhubsteststorageaccount.blob.core.windows.net/");
             var testLogger = new TestLogger("Test");
             var listener = new EventHubListener(
                                     functionId,
@@ -246,7 +245,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
                                     new Mock<CloudBlobContainer>(MockBehavior.Strict, new Uri("https://eventhubsteststorageaccount.blob.core.windows.net/azure-webjobs-eventhub")).Object);
 
             (listener as IDisposable).Dispose();
-            Assert.Single(testLogger.GetLogMessages().Where(x => x.FormattedMessage.StartsWith("EventHub listener stopped (")));
+            Assert.Single(testLogger.GetLogMessages().Where(x => x.FormattedMessage.StartsWith("EventHub listener is already stopped (")));
         }
     }
 }

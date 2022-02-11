@@ -35,8 +35,8 @@ namespace Microsoft.Azure.WebJobs.EventHubs
         private readonly EventHubOptions _options;
         private readonly ILogger _logger;
         private readonly SemaphoreSlim _stopSemaphoreSlim = new SemaphoreSlim(1, 1);
+        private readonly string _details;
         private bool _started;
-        private string _details;
 
         private Lazy<EventHubsScaleMonitor> _scaleMonitor;
 
@@ -94,6 +94,11 @@ namespace Microsoft.Azure.WebJobs.EventHubs
                 if (_started)
                 {
                     await _eventProcessorHost.UnregisterEventProcessorAsync();
+                    _logger.LogDebug($"EventHub listener stopped ({_details})");
+                }
+                else
+                {
+                    _logger.LogDebug($"EventHub listener is already stopped ({_details})");
                 }
                 _started = false;
             }
@@ -101,8 +106,6 @@ namespace Microsoft.Azure.WebJobs.EventHubs
             {
                 _stopSemaphoreSlim.Release();
             }
-
-            _logger.LogDebug($"EventHub listener stopped ({_details})");
         }
 
         IEventProcessor IEventProcessorFactory.CreateEventProcessor(PartitionContext context)
