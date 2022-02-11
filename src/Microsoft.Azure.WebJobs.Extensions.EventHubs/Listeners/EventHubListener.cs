@@ -35,7 +35,8 @@ namespace Microsoft.Azure.WebJobs.EventHubs
         private readonly EventHubOptions _options;
         private readonly ILogger _logger;
         private readonly SemaphoreSlim _stopSemaphoreSlim = new SemaphoreSlim(1, 1);
-        private bool _started;     
+        private bool _started;
+        private string _details;
 
         private Lazy<EventHubsScaleMonitor> _scaleMonitor;
 
@@ -63,6 +64,8 @@ namespace Microsoft.Azure.WebJobs.EventHubs
             _options = options;
             _logger = logger;
             _scaleMonitor = new Lazy<EventHubsScaleMonitor>(() => new EventHubsScaleMonitor(_functionId, _eventHubName, _consumerGroup, _connectionString, _storageConnectionString, _logger, blobContainer));
+            _details = $"'namespace='{eventProcessorHost?.EndpointAddress}', eventHub='{eventProcessorHost?.EventHubPath}', " +
+                $"consumerGroup='{eventProcessorHost?.ConsumerGroupName}', functionId='{functionId}', singleDispatch='{singleDispatch}'";
         }
 
         void IListener.Cancel()
@@ -79,6 +82,8 @@ namespace Microsoft.Azure.WebJobs.EventHubs
         {
             await _eventProcessorHost.RegisterEventProcessorFactoryAsync(this, _options.EventProcessorOptions);
             _started = true;
+
+            _logger.LogDebug($"EventHub listener started ({_details})");
         }
 
         public async Task StopAsync(CancellationToken cancellationToken)
@@ -96,6 +101,8 @@ namespace Microsoft.Azure.WebJobs.EventHubs
             {
                 _stopSemaphoreSlim.Release();
             }
+
+            _logger.LogDebug($"EventHub listener stopped ({_details})");
         }
 
         IEventProcessor IEventProcessorFactory.CreateEventProcessor(PartitionContext context)

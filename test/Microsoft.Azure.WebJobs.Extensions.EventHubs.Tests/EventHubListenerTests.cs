@@ -11,6 +11,7 @@ using Microsoft.Azure.EventHubs;
 using Microsoft.Azure.EventHubs.Processor;
 using Microsoft.Azure.WebJobs.EventHubs.Listeners;
 using Microsoft.Azure.WebJobs.Host.Executors;
+using Microsoft.Azure.WebJobs.Host.Listeners;
 using Microsoft.Azure.WebJobs.Host.Scale;
 using Microsoft.Azure.WebJobs.Host.TestCommon;
 using Microsoft.Extensions.Logging;
@@ -221,6 +222,31 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
             var scaleMonitor2 = listener.GetMonitor();
 
             Assert.Same(scaleMonitor, scaleMonitor2);
+        }
+
+        [Fact]
+        public void Dispose_Calls_StopAsync()
+        {                       
+            string functionId = "FunctionId";
+            string eventHubName = "EventHubName";
+            string consumerGroup = "ConsumerGroup";
+            var storageUri = new Uri("https://eventhubsteststorageaccount.blob.core.windows.net/");
+            var testLogger = new TestLogger("Test");
+            EventHubListener listener = new EventHubListener(
+                                    functionId,
+                                    eventHubName,
+                                    consumerGroup,
+                                    "Endpoint=sb://test.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=abc123=",
+                                    "DefaultEndpointsProtocol=https;AccountName=EventHubScaleMonitorFakeTestAccount;AccountKey=ABCDEFG;EndpointSuffix=core.windows.net",
+                                    new Mock<ITriggeredFunctionExecutor>(MockBehavior.Strict).Object,
+                                    null,
+                                    false,
+                                    new EventHubOptions(),
+                                    testLogger,
+                                    new Mock<CloudBlobContainer>(MockBehavior.Strict, new Uri("https://eventhubsteststorageaccount.blob.core.windows.net/azure-webjobs-eventhub")).Object);
+
+            (listener as IDisposable).Dispose();
+            Assert.Single(testLogger.GetLogMessages().Where(x => x.FormattedMessage.StartsWith("EventHub listener stopped (")));
         }
     }
 }

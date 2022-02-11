@@ -10,3 +10,4 @@
 
 #### Version 4.3.1
 - Stop Listener when disposed [#105](https://github.com/Azure/azure-functions-eventhubs-extension/pull/105)
+- Add listener details [#105](https://github.com/Azure/azure-functions-eventhubs-extension/pull/105)
