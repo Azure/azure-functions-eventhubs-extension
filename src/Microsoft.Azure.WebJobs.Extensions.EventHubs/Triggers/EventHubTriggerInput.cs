@@ -80,7 +80,7 @@ namespace Microsoft.Azure.WebJobs.EventHubs
 
             return new Dictionary<string, string>()
             {
-                { "PartionId", context.PartitionId },
+                { "PartitionId", context.PartitionId },
                 { "Offset", offset },
                 { "EnqueueTimeUtc", enqueueTimeUtc },
                 { "SequenceNumber", sequenceNumber },
